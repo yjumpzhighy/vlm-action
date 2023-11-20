@@ -17,8 +17,9 @@ However, above criterials won't met in llm finetune tasks:
 
 ## prompt-tuning
 prompt tuning uses PET to construct inputs, to transmit finetune tasks to pre-train mlm tasks.
+
 For example prompt to emotionally classify "I like disney films very much. [SEP]":
-Prompt as "I like disney films very much. [SEP] It was [MASK]. [SEP]", which becomes a mlm task having the model to predict the [MASK]
+prompt as "I like disney films very much. [SEP] It was [MASK]. [SEP]", which becomes a mlm task having the model to predict the [MASK]
 and allow cross entropy to calcuate the gradient. 
 In real experiment for faster training, usally narrow the label space. In above case,can project words like "great""good""awesome" to
 "positive", and projects words like "bad""awful""terrible" to "negative".
