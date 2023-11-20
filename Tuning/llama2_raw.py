@@ -1,3 +1,4 @@
+import os
 import torch
 from transformers import (
     AutoModelForCausalLM,
@@ -8,7 +9,8 @@ from transformers import (
     logging,
     GenerationConfig
 )
-from utils import inference
+from utils import inference_answer
+
 
 
 base_model_name = "NousResearch/Llama-2-7b-chat-hf"
@@ -20,4 +22,4 @@ base_model = AutoModelForCausalLM.from_pretrained(
 tokenizer = AutoTokenizer.from_pretrained(base_model_name, 
                                           trust_remote_code=True)
 
-inference("how is the company amazon?", tokenizer, base_model)
+inference_answer("how is the company amazon?", tokenizer, base_model)
