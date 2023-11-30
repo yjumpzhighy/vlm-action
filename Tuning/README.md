@@ -59,7 +59,7 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
      )
      """
 
-     # 2. What is PrefixEncoder? related code in <perf/tuners/prefix_tuning/model.py>:
+     # 2. What is PrefixEncoder? trimmed related code in <perf/tuners/prefix_tuning/model.py>:
      def __init__(self, config):
             # Use a two-layer MLP to encode the prefix
             self.embedding = torch.nn.Embedding(num_virtual_tokens, token_dim)
@@ -73,9 +73,21 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
             past_key_values = self.transform(prefix_tokens)
      	    return past_key_values
      # simply, PrefixEncoder take virtual tokens inputs_id and output past_key_values with shape(num_virtual_tokens,
-     # num_layers * 2 * token_dim), we will find out what num_layers and 2 means here.
+     # num_layers * 2 * token_dim), we will find out what num_layers and 2 means here 
 
-     # 3. What 
+     # 3. How does prefixEncoder integrated with base model? trimmed related code in <perf/peft_model.py>:
+        prompt_tokens = torch.arange(num_virtual_tokens).long().unsqueeze(0).expand(batch_size, -1) #(b, num_virtual_tokens)
+	past_key_values = PrefixEncoder(prompt_tokens).view(
+                batch_size,
+                num_virtual_tokens,
+                num_layers * 2,
+                num_attention_heads,
+                token_dim // num_attention_heads)  #(b, num_virtual_tokens, num_layers * 2, num_attention_heads, token_dim//num_attention_heads)
+	past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2) #(num_layers, 2, b, num_attention_heads, num_virtual_tokens, token_dim//num_attention_heads)
+ 
+        
+
+	
 
 ## p-tuning
 
