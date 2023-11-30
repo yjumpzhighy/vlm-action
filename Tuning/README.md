@@ -38,13 +38,15 @@ Thus, it is actually not necessary to design the descrte static template.
 ### prefix-tuning
 Instead of descrte static template, continuous trainable vitual tokens be added as task prefix to intruct finetune tasks.
 
+    # 1. What does prefix applied model look like?
     base_model = AutoModelForCausalLM.from_pretrained(base_model_name)
     peft_config = PrefixTuningConfig(task_type="CAUSAL_LM", 
                                      num_virtual_tokens=30,
                                      prefix_projection=True)
     model = get_peft_model(base_model, peft_config)
-
-    """ Besides base model, a promot encoder will be added into PeftModelForCausalLM
+    print(model)
+    
+    """ Besides base model, a new PrefixEncoder will be added into PeftModelForCausalLM
     (prompt_encoder): ModuleDict(
     	(default): PrefixEncoder(
       		(embedding): Embedding(30, 4096)
@@ -57,7 +59,23 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
      )
      """
 
-   
+     # 2. What is PrefixEncoder? related code in <perf/tuners/prefix_tuning/model.py>:
+     def __init__(self, config):
+            # Use a two-layer MLP to encode the prefix
+            self.embedding = torch.nn.Embedding(num_virtual_tokens, token_dim)
+            self.transform = torch.nn.Sequential(
+                torch.nn.Linear(token_dim, encoder_hidden_size),
+                torch.nn.Tanh(),
+                torch.nn.Linear(encoder_hidden_size, num_layers * 2 * token_dim),
+            )
+     def forward(self, prefix: torch.Tensor):
+            prefix_tokens = self.embedding(prefix)
+            past_key_values = self.transform(prefix_tokens)
+     	    return past_key_values
+     # simply, PrefixEncoder take virtual tokens inputs_id and output past_key_values with shape(num_virtual_tokens,
+     # num_layers * 2 * token_dim), we will find out what num_layers and 2 means here.
+
+     # 3. What 
 
 ## p-tuning
 
