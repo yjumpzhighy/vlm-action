@@ -15,7 +15,7 @@ However, above criterials won't met in llm finetune tasks:
 3) extreme to train a ~100B model  
 
 
-## prompt-tuning
+## hard prompt
 prompt tuning uses PET to construct inputs, to transmit finetune tasks to pre-train mlm tasks.  
 
 For example prompt to emotionally classify "I like disney films very much. [SEP]":  
@@ -30,9 +30,34 @@ Prompt-tuning did great improvment for llm tuning compared with classic finetune
 3) discrete prompts corresponding word embeddings didn't involved in training.
 4) manually pattern design costs a lot.
 
-## p-tuning
+## soft prompt
 Q: Does the pattern must consist of natual knowledge tokens?  
 A: No!It can be anytime once the model can recongnize.  
+Thus, it is actually not necessary to design the descrte static template.
+
+### prefix-tuning
+Instead of descrte static template, continuous trainable vitual tokens be added as task prefix to intruct finetune tasks.
+
+
+    peft_config = PrefixTuningConfig(task_type="CAUSAL_LM", 
+                                     num_virtual_tokens=30,
+                                     prefix_projection=True)
+    model = get_peft_model(base_model, peft_config)
+
+    (prompt_encoder): ModuleDict(
+    	(default): PrefixEncoder(
+      		(embedding): Embedding(30, 4096)
+      		(transform): Sequential(
+        		(0): Linear(in_features=4096, out_features=4096, bias=True)
+        		(1): Tanh()
+        		(2): Linear(in_features=4096, out_features=262144, bias=True)
+      		)		
+    	)
+  	)
+
+
+## p-tuning
+
 
 p-tuning uses trainable virtual tokens as prompt, able to construct the pattern self-adaptively.
 
