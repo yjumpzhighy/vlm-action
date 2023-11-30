@@ -38,12 +38,13 @@ Thus, it is actually not necessary to design the descrte static template.
 ### prefix-tuning
 Instead of descrte static template, continuous trainable vitual tokens be added as task prefix to intruct finetune tasks.
 
-
+    base_model = AutoModelForCausalLM.from_pretrained(base_model_name)
     peft_config = PrefixTuningConfig(task_type="CAUSAL_LM", 
                                      num_virtual_tokens=30,
                                      prefix_projection=True)
     model = get_peft_model(base_model, peft_config)
 
+    """ Besides base model, a promot encoder will be added into PeftModelForCausalLM
     (prompt_encoder): ModuleDict(
     	(default): PrefixEncoder(
       		(embedding): Embedding(30, 4096)
@@ -53,8 +54,10 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
         		(2): Linear(in_features=4096, out_features=262144, bias=True)
       		)		
     	)
-  	)
+     )
+     """
 
+   
 
 ## p-tuning
 
