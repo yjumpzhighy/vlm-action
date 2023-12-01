@@ -90,22 +90,22 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
     	#Inside basemodel(like LlamaForCausalLM), trimed related code in <transformers/models/llama/modeling_llama.py>:
 		class LlamaModel(LlamaPreTrainedModel):
  			def forward():
-				for idx, decoder_layer in enumerate(self.layers):
-	    			layer_outputs = decoder_layer(
-                    	hidden_states,
-                    	attention_mask=attention_mask,
-                    	position_ids=position_ids,
-                    	past_key_value= past_key_values[idx],
-                    	output_attentions=output_attentions,
-		                use_cache=use_cache,
+				for idx, decoder_layer in enumerate(self.layers): 
+	    			layer_outputs = decoder_layer( 
+                    	hidden_states, 
+                    	attention_mask=attention_mask, 
+                    	position_ids=position_ids, 
+                    	past_key_value= past_key_values[idx], 
+                    	output_attentions=output_attentions, 
+		                use_cache=use_cache, 
             		) 
 		class LlamaAttention(nn.Module):
 			def forward():
-  				query_states = self.q_proj(hidden_states)
-            	key_states = self.k_proj(hidden_states)
-            	value_states = self.v_proj(hidden_states)
-  				if past_key_value is not None:
-            		key_states = torch.cat([past_key_value[0], key_states], dim=2)
+  				query_states = self.q_proj(hidden_states) 
+            	key_states = self.k_proj(hidden_states) 
+            	value_states = self.v_proj(hidden_states) 
+  				if past_key_value is not None: 
+            		key_states = torch.cat([past_key_value[0], key_states], dim=2) 
             		value_states = torch.cat([past_key_value[1], value_states], dim=2) 
 	    #compared to noraml attention layers, the prefix model passed in past_key_value from prefix encoder into
 	    #base model, and concat to k and v in each layer! Thus in the base model attention layer, the query contains
