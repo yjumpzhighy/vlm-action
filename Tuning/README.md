@@ -98,16 +98,16 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
 		class LlamaAttention(nn.Module):
 			def forward():
   				query_states = self.q_proj(hidden_states) 
-            	key_states = self.k_proj(hidden_states) 
-            	value_states = self.v_proj(hidden_states) 
+            			key_states = self.k_proj(hidden_states) 
+            			value_states = self.v_proj(hidden_states) 
   				if past_key_value is not None: 
             		key_states = torch.cat([past_key_value[0], key_states], dim=2) 
             		value_states = torch.cat([past_key_value[1], value_states], dim=2) 
-	    #compared to noraml attention layers, the prefix model passed in past_key_value from prefix encoder into
-	    #base model, and concat to k and v in each layer! Thus in the base model attention layer, the query contains
-	    #input info(no prefix), the key and val contains input and prefix info, which is kind of info fuse.
+	       #compared to noraml attention layers, the prefix model passed in past_key_value from prefix encoder into
+	       #base model, and concat to k and v in each layer! Thus in the base model attention layer, the query contains
+	       #input info(no prefix), the key and val contains input and prefix info, which is kind of info fuse.
 
-	 # 4. Conclusion
+     # 4. Conclusion
      Prefix tuning created a new encoder for vitual tokens, and its output past_key_values will be inserted into
 	 base model's each layer! Look at the past_key_values shape(num_layers,2,b,num_attention_heads,num_virtual_tokens,
      token_dim//num_attention_heads), num_layers is the number of base model's layers, 2 is for q and v concat.
