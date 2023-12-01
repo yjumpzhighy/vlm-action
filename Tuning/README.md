@@ -76,15 +76,15 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
      # num_layers * 2 * token_dim), we will find out what num_layers and 2 means here 
 
      # 3. How does prefixEncoder integrated with base model? trimmed related code in <perf/peft_model.py>:
-     	# shape(b, num_virtual_tokens)
+     	# shape(b, num_virtual_tokens).
       	prompt_tokens = torch.arange(num_virtual_tokens).long().unsqueeze(0).expand(batch_size, -1) 
-	
- 	# shape(b, num_virtual_tokens, num_layers * 2, num_attention_heads, token_dim//num_attention_heads)
+
+ 	# shape(b, num_virtual_tokens, num_layers * 2, num_attention_heads, token_dim//num_attention_heads).
  	past_key_values = PrefixEncoder(prompt_tokens).view(
  		batch_size, num_virtual_tokens, num_layers * 2,
 		num_attention_heads, token_dim // num_attention_heads) 
-  
-	# shape(num_layers, 2, b, num_attention_heads, num_virtual_tokens, token_dim//num_attention_heads)
+
+	# shape(num_layers, 2, b, num_attention_heads, num_virtual_tokens, token_dim//num_attention_heads).
  	past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2) 
  
         
