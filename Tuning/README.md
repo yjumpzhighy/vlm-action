@@ -90,14 +90,10 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
     	#Inside basemodel(like LlamaForCausalLM), trimed related code in <transformers/models/llama/modeling_llama.py>:
 		class LlamaModel(LlamaPreTrainedModel):
  			def forward():
-				for idx, decoder_layer in enumerate(self.layers): 
-	    			layer_outputs = decoder_layer( 
-                    	hidden_states, 
-                    	attention_mask=attention_mask, 
-                    	position_ids=position_ids, 
-                    	past_key_value= past_key_values[idx], 
-                    	output_attentions=output_attentions, 
-		                use_cache=use_cache, 
+				for idx, decoder_layer in enumerate(self.layers):
+					layer_outputs = decoder_layer(hidden_states, attention_mask=attention_mask, 
+							position_ids=position_ids, past_key_value= past_key_values[idx], output_attentions=output_attentions, 
+	   						use_cache=use_cache, 
             		) 
 		class LlamaAttention(nn.Module):
 			def forward():
