@@ -35,6 +35,28 @@ Q: Does the pattern must consist of natual knowledge tokens?
 A: No!It can be anytime once the model can recongnize.  
 Thus, it is actually not necessary to design the descrte static template.
 
+### prompt-tuning
+    # 1. What does prompt applied model look like?
+    	peft_config = PromptTuningConfig(task_type=TaskType.CAUSAL_LM,
+                                     prompt_tuning_init=PromptTuningInit.TEXT,
+                                     prompt_tuning_init_text="",
+                                     num_virtual_tokens=8,
+                                     tokenizer_name_or_path=base_model_name)
+    	base_model = AutoModelForCausalLM.from_pretrained(base_model_name)
+    	model = get_peft_model(base_model, peft_config)
+    	print(model)
+
+    	""" Besides base model, a new PromptEmbedding will be added into PeftModelForCausalLM
+     	(prompt_encoder): ModuleDict(
+      		(default): PromptEmbedding(
+			(embedding): Embedding(8, 1024)
+   		)
+     	)
+    	"""
+
+
+
+
 ### prefix-tuning
 Instead of descrte static template, continuous trainable vitual tokens be added as task prefix to intruct finetune tasks.
 
