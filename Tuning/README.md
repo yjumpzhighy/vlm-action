@@ -50,12 +50,12 @@ Thus, it is actually not necessary to design the descrte static template.
      	(prompt_encoder): ModuleDict(
       		(default): PromptEmbedding(
 			(embedding): Embedding(8, 1024)
-   		)
-     	)
+   		))
     	"""
 
-
-
+    # 2. How does PromptEmbedding integrated with base model? trimmed related code in <perf/peft_model.py>:
+	prefix_labels = torch.full((batch_size, num_virtual_tokens), -100)
+        labels = torch.cat((prefix_labels, labels), dim=1)
 
 ### prefix-tuning
 Instead of descrte static template, continuous trainable vitual tokens be added as task prefix to intruct finetune tasks.
