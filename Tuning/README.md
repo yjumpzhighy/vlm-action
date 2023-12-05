@@ -56,6 +56,21 @@ Thus, it is actually not necessary to design the descrte static template.
     # 2. How does PromptEmbedding integrated with base model? trimmed related code in <perf/peft_model.py>:
 	prefix_labels = torch.full((batch_size, num_virtual_tokens), -100)
         labels = torch.cat((prefix_labels, labels), dim=1)
+        prompt_tokens = torch.arange(num_virtual_tokens).long().unsqueeze(0).expand(batch_size, -1)
+
+ 	#shape(b,num_virtual_tokens,token_dim)
+ 	prompts = PromptEmbedding(prompt_tokens)
+        inputs_embeds = torch.cat((prompts, inputs_embeds), dim=1)
+
+	# After concat virtual tokens embedding with inputs embedding, the inputs to base model actually 
+        # changes to (b, num_virtual_tokens+num_input_tokens, token_dim).
+	# Thus, the label must pad as well.
+
+    # 3. Conclusion:
+    Prompt tuning create a new virtual tokens embedding, and then concat virtual tokens embeddings with 
+    input tokens embeddings, and then feed into base model.
+    
+    
 
 ### prefix-tuning
 Instead of descrte static template, continuous trainable vitual tokens be added as task prefix to intruct finetune tasks.
