@@ -72,7 +72,7 @@ Thus, it is actually not necessary to design the descrte static template.
     # 3. Conclusion:
     	Prompt tuning create a new virtual tokens embedding, and then concat virtual tokens embeddings with 
     	input tokens embeddings, and then feed into base model.
-        In training, only the new added PromptEmbedding has back grad and updated.
+     	In training, only the new added PromptEmbedding has back grad and updated.
     
     
 
