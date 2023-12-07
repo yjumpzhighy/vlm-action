@@ -157,7 +157,8 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
      Prefix tuning created a new encoder for vitual tokens, and its output past_key_values will be inserted into
 	 base model's each layer! Look at the past_key_values shape(num_layers,2,b,num_attention_heads,num_virtual_tokens,
      token_dim//num_attention_heads), num_layers is the number of base model's layers, 2 is for q and v concat.
-  
+     In training, only the new added PrefixEncoder embedding has back grad and updated.
+     
 
 	
 
