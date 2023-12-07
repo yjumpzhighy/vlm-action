@@ -54,21 +54,25 @@ Thus, it is actually not necessary to design the descrte static template.
     	"""
 
     # 2. How does PromptEmbedding integrated with base model? trimmed related code in <perf/peft_model.py>:
+		prefix_attention_mask = torch.ones(batch_size, num_virtual_tokens)
+            	attention_mask = torch.cat((prefix_attention_mask, attention_mask), dim=1)
+    
 		prefix_labels = torch.full((batch_size, num_virtual_tokens), -100) 
  		labels = torch.cat((prefix_labels, labels), dim=1)
-  		prompt_tokens = torch.arange(num_virtual_tokens).long().unsqueeze(0).expand(batch_size, -1)
-	
+   
+  		prompt_tokens = torch.arange(num_virtual_tokens).long().unsqueeze(0).expand(batch_size, -1)	
  		#shape(b,num_virtual_tokens,token_dim) 
   		prompts = PromptEmbedding(prompt_tokens) 
    		inputs_embeds = torch.cat((prompts, inputs_embeds), dim=1)
 
 		# After concat virtual tokens embedding with inputs embedding, the inputs to base model actually 
   		# changes to (b, num_virtual_tokens+num_input_tokens, token_dim).
-		# Thus, the label must pad as well.
+		# The label and attention mask must pad as well.
 
     # 3. Conclusion:
     	Prompt tuning create a new virtual tokens embedding, and then concat virtual tokens embeddings with 
     	input tokens embeddings, and then feed into base model.
+        In training, only the new added PromptEmbedding has back grad and updated.
     
     
 
@@ -113,8 +117,12 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
      	# num_layers * 2 * token_dim), we will find out what num_layers and 2 means here 
 
      # 3. How does prefixEncoder integrated with base model? trimmed related code in <perf/peft_model.py>:
+     		# expand attention mask
+		prefix_attention_mask = torch.ones(batch_size, num_virtual_tokens)
+            	attention_mask = torch.cat((prefix_attention_mask, attention_mask), dim=1)
+     
 	 	#shape(b, num_virtual_tokens).
-      	prompt_tokens = torch.arange(num_virtual_tokens).long().unsqueeze(0).expand(batch_size, -1)
+      		prompt_tokens = torch.arange(num_virtual_tokens).long().unsqueeze(0).expand(batch_size, -1)
 
  		#shape(b,num_virtual_tokens,num_layers*2,num_attention_heads,token_dim//num_attention_heads)
  		past_key_values = PrefixEncoder(prompt_tokens).view(
@@ -124,7 +132,7 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
 		#shape(num_layers,2,b,num_attention_heads,num_virtual_tokens,token_dim//num_attention_heads)
  		past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2)
  
-    	#Inside basemodel(like LlamaForCausalLM), trimed related code in <transformers/models/llama/modeling_llama.py>:
+    		#Inside basemodel(like LlamaForCausalLM), trimed related code in <transformers/models/llama/modeling_llama.py>:
 		class LlamaModel(LlamaPreTrainedModel):
  			def forward():
 				for idx, decoder_layer in enumerate(self.layers):
@@ -140,7 +148,8 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
   				if past_key_value is not None: 
             		key_states = torch.cat([past_key_value[0], key_states], dim=2) 
             		value_states = torch.cat([past_key_value[1], value_states], dim=2) 
-	       #compared to noraml attention layers, the prefix model passed in past_key_value from prefix encoder into
+	      
+	       #Compared to noraml attention layers, the prefix model passed in past_key_value from prefix encoder into
 	       #base model, and concat to k and v in each layer! Thus in the base model attention layer, the query contains
 	       #input info(no prefix), the key and val contains input and prefix info, which is kind of info fuse.
 
