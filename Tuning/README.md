@@ -31,8 +31,8 @@ Prompt-tuning did great improvment for llm tuning compared with classic finetune
 4) manually pattern design costs a lot.
 
 ## soft prompt
-Q: Does the pattern must consist of natual knowledge tokens?  
-A: No!It can be anytime once the model can recongnize.  
+Q: Does the pattern must consist of natual language tokens?  
+A: No!It can be anytime once the model can recongnize, to guide the model on specific sub tasks.
 Thus, it is actually not necessary to design the descrte static template.
 
 ### prompt-tuning
@@ -118,19 +118,19 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
 
      # 3. How does prefixEncoder integrated with base model? trimmed related code in <perf/peft_model.py>:
      	# expand attention mask
-		prefix_attention_mask = torch.ones(batch_size, num_virtual_tokens)
-        attention_mask = torch.cat((prefix_attention_mask, attention_mask), dim=1)
+	prefix_attention_mask = torch.ones(batch_size, num_virtual_tokens) 
+  	attention_mask = torch.cat((prefix_attention_mask, attention_mask), dim=1)
      
-	 	#shape(b, num_virtual_tokens).
+	#shape(b, num_virtual_tokens).
       	prompt_tokens = torch.arange(num_virtual_tokens).long().unsqueeze(0).expand(batch_size, -1)
 
- 		#shape(b,num_virtual_tokens,num_layers*2,num_attention_heads,token_dim//num_attention_heads)
- 		past_key_values = PrefixEncoder(prompt_tokens).view(
+ 	#shape(b,num_virtual_tokens,num_layers*2,num_attention_heads,token_dim//num_attention_heads)
+ 	past_key_values = PrefixEncoder(prompt_tokens).view(
  			batch_size, num_virtual_tokens, num_layers * 2,
 			num_attention_heads, token_dim // num_attention_heads)
   
-		#shape(num_layers,2,b,num_attention_heads,num_virtual_tokens,token_dim//num_attention_heads)
- 		past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2)
+	#shape(num_layers,2,b,num_attention_heads,num_virtual_tokens,token_dim//num_attention_heads)
+ 	past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2)
  
     	#Inside basemodel(like LlamaForCausalLM), trimed related code in <transformers/models/llama/modeling_llama.py>:
 		class LlamaModel(LlamaPreTrainedModel):
