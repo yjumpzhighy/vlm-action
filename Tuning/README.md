@@ -162,12 +162,21 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
 
 	
 
-## p-tuning
+## p-tuning-v2
+p-tuning-v2 is highly similar with prefix tuning, which concat virual tokens embddings into transformer q/k.
+
+	# 1. Compared with prefix tuning, minor difference in PrefixEncoder. related code in <perf/tuners/prefix_tuning/model.py>:
+    	def __init__(self, config):
+            # Use a two-layer MLP to encode the prefix
+            self.embedding = torch.nn.Embedding(num_virtual_tokens, num_layers * 2 * token_dim)
+     	def forward(self, prefix: torch.Tensor):
+            prefix_tokens = self.embedding(prefix)
+     	    return past_key_values
+	# 2.Conclusion
+ 	The pipeline is almost the same with prefix tuning method, while a minor difference on how virtual tokens embedding generated.
+  	Obvisouly, p-turning-v2 adds much less new trainable parameters than prefix tuning.
 
 
-p-tuning uses trainable virtual tokens as prompt, able to construct the pattern self-adaptively.
-
-
-
+## lora/qlora
 
    
