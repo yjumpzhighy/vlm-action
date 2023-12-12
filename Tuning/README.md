@@ -179,7 +179,8 @@ p-tuning-v2 is highly similar with prefix tuning, which concat virual tokens emb
 
 ## lora
 in llm model, the most consuming part is matrix multiplication. 
-	# 1. What does lora model looks like? it inserts lora layers into transformer block
+	
+	# 1. What does lora model looks like? it inserts lora layers into transformer block 
  	(self_attn): Attention(
               (q_proj): Linear(
                 in_features=4096, out_features=4096, bias=False
@@ -197,7 +198,7 @@ in llm model, the most consuming part is matrix multiplication.
                 (lora_B): ModuleDict((default): Linear(in_features=8, out_features=4096, bias=False))
                 (lora_embedding_A): ParameterDict()
                 (lora_embedding_B): ParameterDict()
-              )
+              ) 
 	# 2. How does lora layers integrated with base model?
 	
  	
