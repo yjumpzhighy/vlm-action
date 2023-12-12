@@ -187,8 +187,6 @@ in llm model, the most consuming part is matrix multiplication.
                 (lora_dropout): ModuleDict((default): Dropout(p=0.1, inplace=False))
                 (lora_A): ModuleDict((default): Linear(in_features=4096, out_features=8, bias=False))
                 (lora_B): ModuleDict((default): Linear(in_features=8, out_features=4096, bias=False))
-                (lora_embedding_A): ParameterDict()
-                (lora_embedding_B): ParameterDict()
               )
               (k_proj): Linear(in_features=4096, out_features=4096, bias=False)
               (v_proj): Linear(
@@ -196,11 +194,18 @@ in llm model, the most consuming part is matrix multiplication.
                 (lora_dropout): ModuleDict((default): Dropout(p=0.1, inplace=False))
                 (lora_A): ModuleDict((default): Linear(in_features=4096, out_features=8, bias=False))
                 (lora_B): ModuleDict((default): Linear(in_features=8, out_features=4096, bias=False))
-                (lora_embedding_A): ParameterDict()
-                (lora_embedding_B): ParameterDict()
               ) 
-	# 2. How does lora layers integrated with base model?
-	
- 	
+	# 2. How does lora layers integrated with base model? reference in peft/src/peft/tuners/lora/model.py
+ 	     def forward():
+		lora_A = self.lora_A[active_adapter]
+                lora_B = self.lora_B[active_adapter]
+                dropout = self.lora_dropout[active_adapter]
+                scaling = self.scaling[active_adapter]
+                x = x.to(lora_A.weight.dtype)
+                result += lora_B(lora_A(dropout(x))) * scaling
+ 	     # i.e, applying y=Wx+BAx, where A initalized with guassian and B initialize with 0.
+       # 3. Conclusion
+       Lora added low rank matrix mlp to capture data features. Without touching transformer core logics,
+       lora just changed a little bit how to get qkv from input x. 
 
    
