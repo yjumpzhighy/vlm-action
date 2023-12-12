@@ -31,9 +31,50 @@ Prompt-tuning did great improvment for llm tuning compared with classic finetune
 4) manually pattern design costs a lot.
 
 ## soft prompt
-Q: Does the pattern must consist of natual knowledge tokens?  
-A: No!It can be anytime once the model can recongnize.  
+Q: Does the pattern must consist of natual language tokens?  
+A: No!It can be anytime once the model can recongnize, to guide the model on specific sub tasks.
 Thus, it is actually not necessary to design the descrte static template.
+
+### prompt-tuning
+    # 1. What does prompt applied model look like?
+    	peft_config = PromptTuningConfig(task_type=TaskType.CAUSAL_LM,
+                                     prompt_tuning_init=PromptTuningInit.TEXT,
+                                     prompt_tuning_init_text="",
+                                     num_virtual_tokens=8,
+                                     tokenizer_name_or_path=base_model_name)
+    	base_model = AutoModelForCausalLM.from_pretrained(base_model_name)
+    	model = get_peft_model(base_model, peft_config)
+    	print(model)
+
+    	""" Besides base model, a new PromptEmbedding will be added into PeftModelForCausalLM
+     	(prompt_encoder): ModuleDict(
+      		(default): PromptEmbedding(
+			(embedding): Embedding(8, 1024)
+   		))
+    	"""
+
+    # 2. How does PromptEmbedding integrated with base model? trimmed related code in <perf/peft_model.py>:
+		prefix_attention_mask = torch.ones(batch_size, num_virtual_tokens)
+            	attention_mask = torch.cat((prefix_attention_mask, attention_mask), dim=1)
+    
+		prefix_labels = torch.full((batch_size, num_virtual_tokens), -100) 
+ 		labels = torch.cat((prefix_labels, labels), dim=1)
+   
+  		prompt_tokens = torch.arange(num_virtual_tokens).long().unsqueeze(0).expand(batch_size, -1)	
+ 		#shape(b,num_virtual_tokens,token_dim) 
+  		prompts = PromptEmbedding(prompt_tokens) 
+   		inputs_embeds = torch.cat((prompts, inputs_embeds), dim=1)
+
+		# After concat virtual tokens embedding with inputs embedding, the inputs to base model actually 
+  		# changes to (b, num_virtual_tokens+num_input_tokens, token_dim).
+		# The label and attention mask must pad as well.
+
+    # 3. Conclusion:
+    	Prompt tuning create a new virtual tokens embedding, and then concat virtual tokens embeddings with 
+    	input tokens embeddings, and then feed into base model.
+     	In training, only the new added PromptEmbedding has back grad and updated.
+    
+    
 
 ### prefix-tuning
 Instead of descrte static template, continuous trainable vitual tokens be added as task prefix to intruct finetune tasks.
@@ -76,7 +117,11 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
      	# num_layers * 2 * token_dim), we will find out what num_layers and 2 means here 
 
      # 3. How does prefixEncoder integrated with base model? trimmed related code in <perf/peft_model.py>:
-	 	#shape(b, num_virtual_tokens).
+     	# expand attention mask
+		prefix_attention_mask = torch.ones(batch_size, num_virtual_tokens) 
+  		attention_mask = torch.cat((prefix_attention_mask, attention_mask), dim=1)
+     
+		#shape(b, num_virtual_tokens).
       	prompt_tokens = torch.arange(num_virtual_tokens).long().unsqueeze(0).expand(batch_size, -1)
 
  		#shape(b,num_virtual_tokens,num_layers*2,num_attention_heads,token_dim//num_attention_heads)
@@ -103,7 +148,8 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
   				if past_key_value is not None: 
             		key_states = torch.cat([past_key_value[0], key_states], dim=2) 
             		value_states = torch.cat([past_key_value[1], value_states], dim=2) 
-	       #compared to noraml attention layers, the prefix model passed in past_key_value from prefix encoder into
+	      
+	       #Compared to noraml attention layers, the prefix model passed in past_key_value from prefix encoder into
 	       #base model, and concat to k and v in each layer! Thus in the base model attention layer, the query contains
 	       #input info(no prefix), the key and val contains input and prefix info, which is kind of info fuse.
 
@@ -111,16 +157,55 @@ Instead of descrte static template, continuous trainable vitual tokens be added 
      Prefix tuning created a new encoder for vitual tokens, and its output past_key_values will be inserted into
 	 base model's each layer! Look at the past_key_values shape(num_layers,2,b,num_attention_heads,num_virtual_tokens,
      token_dim//num_attention_heads), num_layers is the number of base model's layers, 2 is for q and v concat.
-  
+     In training, only the new added PrefixEncoder embedding has back grad and updated.
+     
 
 	
 
-## p-tuning
+## p-tuning-v2
+p-tuning-v2 is highly similar with prefix tuning, which concat virual tokens embddings into transformer q/k.
+
+	# 1. Compared with prefix tuning, minor difference in PrefixEncoder. related code in <perf/tuners/prefix_tuning/model.py>:
+    	def __init__(self, config):  
+     		# Use a two-layer MLP to encode the prefix 
+       		self.embedding = torch.nn.Embedding(num_virtual_tokens, num_layers * 2 * token_dim) 
+     	def forward(self, prefix: torch.Tensor): 
+      		prefix_tokens = self.embedding(prefix)
+     		return past_key_values
+	# 2.Conclusion
+ 	The pipeline is almost the same with prefix tuning method, while a minor difference on how virtual tokens embedding generated.
+  	Obvisouly, p-turning-v2 adds much less new trainable parameters than prefix tuning.
 
 
-p-tuning uses trainable virtual tokens as prompt, able to construct the pattern self-adaptively.
-
-
-
+## lora
+lora add mlp (low rank) at qkv projection from input x, and keeps all dimensions the same as original model.
+	
+	# 1. What does lora model looks like? it inserts lora layers into transformer block 
+ 	(self_attn): Attention(
+              (q_proj): Linear(
+                in_features=4096, out_features=4096, bias=False
+                (lora_dropout): ModuleDict((default): Dropout(p=0.1, inplace=False))
+                (lora_A): ModuleDict((default): Linear(in_features=4096, out_features=8, bias=False))
+                (lora_B): ModuleDict((default): Linear(in_features=8, out_features=4096, bias=False))
+              )
+              (k_proj): Linear(in_features=4096, out_features=4096, bias=False)
+              (v_proj): Linear(
+                in_features=4096, out_features=4096, bias=False
+                (lora_dropout): ModuleDict((default): Dropout(p=0.1, inplace=False))
+                (lora_A): ModuleDict((default): Linear(in_features=4096, out_features=8, bias=False))
+                (lora_B): ModuleDict((default): Linear(in_features=8, out_features=4096, bias=False))
+              ) 
+	# 2. How does lora layers integrated with base model? reference in peft/src/peft/tuners/lora/model.py
+ 	     def forward():
+		lora_A = self.lora_A[active_adapter]
+                lora_B = self.lora_B[active_adapter]
+                dropout = self.lora_dropout[active_adapter]
+                scaling = self.scaling[active_adapter]
+                x = x.to(lora_A.weight.dtype)
+                result += lora_B(lora_A(dropout(x))) * scaling
+ 	     # i.e, applying y=Wx+BAx, where A initalized with guassian and B initialize with 0.
+       # 3. Conclusion
+       Lora added low rank matrix mlp to capture data features. Without touching transformer core logics,
+       lora just changed a little bit how to get qkv from input x. 
 
    
