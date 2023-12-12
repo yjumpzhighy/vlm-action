@@ -178,7 +178,7 @@ p-tuning-v2 is highly similar with prefix tuning, which concat virual tokens emb
 
 
 ## lora
-in llm model, the most consuming part is matrix multiplication. 
+lora add mlp (low rank) at qkv projection from input x, and keeps all dimensions the same as original model.
 	
 	# 1. What does lora model looks like? it inserts lora layers into transformer block 
  	(self_attn): Attention(
