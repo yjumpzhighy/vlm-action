@@ -9,7 +9,9 @@ Brief tutorial vision-launguage large model related works: modeling, finetune, z
 ## 2. Fintune
 Cover PEFT(Parameter efficent fine tune) common strategies prefix, prompt, p-tuning, p-tuning v2, lora. Example
 scripts be provided as well as peek into how it works. 
-
+### 2.1 FineTune methods
+[introduce](https://github.com/yzy-jumphigh/vlm-action/blob/main/Tuning/README.md)
+### 2.2 lora
 
 
 
