@@ -6,7 +6,7 @@ Brief tutorial vision-launguage large model related works: modeling, finetune, z
 ## 1. Modeling
 (TO BE UPDATED)
 
-## 2. Fintune
+## 2. Finetune
 Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning v2, lora. 
 
 [2.1 Introduce to finetune methods doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/Tuning/README.md) 
