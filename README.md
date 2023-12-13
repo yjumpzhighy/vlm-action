@@ -20,7 +20,8 @@ Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning 
 [2.5 prefix with llama2 pytorch code](https://github.com/yzy-jumphigh/vlm-action/blob/main/Tuning/llama2_prompt.py) 
 
 ## 3. Zero
-Talk about how to utilize zero on large model training, and, how to apply deepspeed within your train pipeline.
+Talk about how to utilize zero on large model training, and, how to apply deepspeed within your train pipeline. 
+
 [3.1 Optimizer analyze doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/Zero/doc/Optimizer%20States%20Overview.md) 
 
 [3.2 Deepspeed overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/Zero/doc/Deepspeed%20Overview.md) 
