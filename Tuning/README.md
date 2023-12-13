@@ -1,4 +1,4 @@
-# tuning tasks on pretrained model 
+# Tuning tasks on pretrained model 
 
 ## classical model finetune
 In traditional deep learning model finetune work, the most common method is to frozen the model body and finetune  
