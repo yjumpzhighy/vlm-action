@@ -1,5 +1,5 @@
 
-# VLM-Tutorial
+# VLM-Action
 Brief tutorial vision-launguage large model related works: modeling, finetune, zero, quantize, deployment, etc.
 
 
