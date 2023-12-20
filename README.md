@@ -24,16 +24,11 @@ Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning 
 ### 3.1 Tensor parallel
 
 
-### 3.2 Zeros
-Talk about how to utilize zero on large model training, and, how to apply deepspeed within your train pipeline. 
+### 3.2 Zero
+Talk about how to utilize zero on large model training, and, how to apply deepspeed within your train pipeline.    
+[3.2.1 deepspeed overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/yzy-jumphigh-parallel/training/Zero/overview.md)   
 
-[3.1 Optimizer analyze doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/Zero/doc/Optimizer%20States%20Overview.md) 
 
-[3.2 Deepspeed overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/Zero/doc/Deepspeed%20Overview.md) 
-
-[3.3 Deepspeed stage 2 doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/Zero/doc/DeepSpeed%20Stage2.md) 
-
-[3.4 Deepspeed stage 3 doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/Zero/doc/DeepSpeed%20Stage3.md) 
 
 
 
