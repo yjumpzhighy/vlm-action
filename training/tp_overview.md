@@ -29,3 +29,6 @@ In mlp structure, like "relu(xA)B":
 In mha structure, like self attention multi-head: 
 
 ![pic](pic/mha_2d_tensor_parallel.JPG)
+
+
+
