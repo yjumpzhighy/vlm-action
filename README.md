@@ -26,7 +26,7 @@ Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning 
 
 ### 3.2 Distrubited Training
 Talk about how to utilize zero on large model training, and, how to apply deepspeed within your train pipeline.    
-[3.2.1 deepspeed overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/yzy-jumphigh-parallel/training/zero_overview.md)   
+[3.2.1 deepspeed overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/training/zero_overview.md)   
 
 
 
