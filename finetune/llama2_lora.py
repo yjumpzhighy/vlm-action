@@ -22,13 +22,14 @@ base_model_name = "meta-llama/Llama-2-7b-chat-hf"
 new_model_name = "llama-2-7b-xxx"
 
 lr = 8e-4
-num_epochs = 50
+num_epochs = 3
 batch_size = 4
-num_virtual_tokens = 30
+
+
 
 tokenizer = AutoTokenizer.from_pretrained(base_model_name, 
-                                          trust_remote_code=True)
-
+                                          trust_remote_code=True,
+                                          use_fast=False)
 tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
@@ -90,27 +91,28 @@ for epoch in range(num_epochs):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        lr_scheduler.step()
       
     print("===>epoch loss:", epoch_loss)
 
-    model.eval()
-    test_inputs = tokenizer([f'@united not happy with this delay from Newark to Manchester tonight :( only 30 mins free Wi-fi sucks ... : ', 
-                            f'@JetBlue Completely understand but would prefer being on time to filling out forms.... : ',
-                            f'Looks tasty! Going to share with everyone I know #FebrezeONE #sponsored https://t.co/4AQI53npei : '],
-                            padding='max_length',
-                            truncation=True,
-                            add_special_tokens=False,
-                            max_length=64,
-                            return_tensors="pt")
+model.eval()
+test_inputs = tokenizer([f'@united not happy with this delay from Newark to Manchester tonight :( only 30 mins free Wi-fi sucks ... : ', 
+                        f'@JetBlue Completely understand but would prefer being on time to filling out forms.... : ',
+                        f'Looks tasty! Going to share with everyone I know #FebrezeONE #sponsored https://t.co/4AQI53npei : '],
+                        padding='max_length',
+                        truncation=True,
+                        add_special_tokens=False,
+                        max_length=64,
+                        return_tensors="pt")
 
-    with torch.no_grad():
-        test_inputs = {k: v.cuda() for k, v in test_inputs.items()}
-        test_outputs = model.generate(
-            input_ids=test_inputs["input_ids"],
-            attention_mask=test_inputs["attention_mask"], 
-            max_new_tokens=10,
-            eos_token_id=tokenizer.eos_token_id
-        )
-        print(tokenizer.batch_decode(test_outputs.detach().cpu().numpy(), skip_special_tokens=True))
+with torch.no_grad():
+    test_inputs = {k: v.cuda() for k, v in test_inputs.items()}
+    test_outputs = model.generate(
+        input_ids=test_inputs["input_ids"],
+        attention_mask=test_inputs["attention_mask"], 
+        max_new_tokens=10,
+        eos_token_id=tokenizer.eos_token_id
+    )
+    print(tokenizer.batch_decode(test_outputs.detach().cpu().numpy(), skip_special_tokens=True))
     
                 
