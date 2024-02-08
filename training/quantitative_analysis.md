@@ -27,6 +27,7 @@ simple linear layer to project feature space into probability space:
     N(lm_head) = d_model * n_vocab
     (d_model is the lm_head input embedding size, n_vocab is vocab dict size)
 
+### model
 Thus, the total model parameters size becomes:
 
     N(model) = n_vocab * d_model + n_blocks*(4(d_model*d_head*n_head) + 2(d_model*d_ffn)) + d_model * n_vocab
