@@ -1,6 +1,6 @@
 
 
-## 1. Basic model size
+## 1. Basic model parameters
 A model usually consist of (embedding, encoder/decoder, lm_head).
 ### embedding 
 embedding layer is a look-up table, with parameters:
@@ -36,3 +36,21 @@ Use llama2-7B as example, where n_vocab=32000, d_model=4096, d_model=d_head*n_he
 d_ffn=11008, n_blocks=32. 
 
     N(llama2-7b) = 6738149376, almost 7b parameters.
+
+
+## 2. Basic model memory usage
+memory usage during model training can be divided into 2 parts: fixed model parameters occupancy and dynamic
+intermediate activations occupancy. 
+### model parameters occupancy
+In training, due to Adam widely used, the memory usage is actually far more than model parameters size.
+
+    1) use fp32 datatype
+    N(model memory) = (N_parameters + N_grad + N_adamm + N_adamv) * 4 [byes]
+    N_paramters/N_grad/N_adamm/N_adamv=N, N is the number of model parameters.
+    thus total memory usage is 16N (bytes). With a llama2-7b, it becomes 104G
+    2) use mixed datatype
+    N(model memory) = N_parameters*2 + N_grad*2 + N_adamm*4 + N_adamv*4 + N_parameters*4 [byes]
+    N_paramters/N_grad/N_adamm/N_adamv=N, N is the number of model parameters.
+    thus total memory usage is 16N (bytes). With a llama2-7b, it becomes 104G
+
+### activations occupancy
