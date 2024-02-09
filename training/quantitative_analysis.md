@@ -105,14 +105,15 @@ n_blocks=32, n_batch=12, n_seq=64
 
 
 ## 3. Lora model memory usage          
-With Lora, the trainable parameters significantly reduced, usually 0.6% of model parameters.
+With Lora, the trainable parameters significantly reduced, usually <0.6% of model parameters.
 ### parameters occupancy
 
     since few trainable parameters, the gradients/adam states parameters are negligible.
 
-    O(parameters) = N_parameters*2 [bytes]
-    (N_paramters=N, N is the number of model parameters)
-    total memory usage is 2N (bytes). With a llama2-7b, it becomes 14G
+    O(parameters) = N_parameters*2 + N_grad*2 + N_adamm*4 + N_adamv*4 + N_lora*4 [bytes]
+    (N_paramters=N, N_grad/N_adamm/N_adamv/N_lora=N*0.6%, N is the number of model parameters)
+    total memory usage is 2N+0.7N (bytes). With a llama2-7b, it becomes 19G
+
 
 ### activations occupancy
 #### Forward
@@ -129,4 +130,4 @@ With Lora, the trainable parameters significantly reduced, usually 0.6% of model
 Use llama2-7b-lora as example, where n_vocab=32000, d_model=4096, n_head=32, d_model=d_head*n_head, d_ffn=11008, 
 n_blocks=32, n_batch=12, n_seq=64
     
-    O(llama2_lora) = O(parameters) + O(forward) + O(backword) ~= 14G + 3G, about 17G.
+    O(llama2_lora) = O(parameters) + O(forward) + O(backword) ~= 19G + 3G, about 22G.
