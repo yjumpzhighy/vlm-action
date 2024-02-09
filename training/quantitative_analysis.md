@@ -45,11 +45,12 @@ intermediate activations occupancy.
 In training, due to Adam widely used, the memory usage is actually far more than model parameters size.
 
     1) use fp32 datatype
-    N(model memory) = (N_parameters + N_grad + N_adamm + N_adamv) * 4 [bytes]
+    O(parameters) = (N_parameters + N_grad + N_adamm + N_adamv) * 4 [bytes]
     (N_paramters/N_grad/N_adamm/N_adamv=N, N is the number of model parameters)
     total memory usage is 16N (bytes). With a llama2-7b, it becomes 104G
+
     2) use mixed datatype
-    N(model memory) = N_parameters*2 + N_grad*2 + N_adamm*4 + N_adamv*4 + N_parameters*4 [bytes]
+    O(parameters) = N_parameters*2 + N_grad*2 + N_adamm*4 + N_adamv*4 + N_parameters*4 [bytes]
     (N_paramters/N_grad/N_adamm/N_adamv=N, N is the number of model parameters)
     total memory usage is 16N (bytes). With a llama2-7b, it becomes 104G
 
@@ -88,12 +89,44 @@ output activation tensor to downstream operations. Those activation tensor will 
         O(lm_head) = (n_batch * n_seq * n_vocab) * 2 [bytes]
 
     O(forward) = (n_batch * n_seq * d_model +\
-                  n_layers*(n_batch * n_seq * (4 * n_head * d_head + n_head * n_seq + 2d_model + 2d_ffn) +\
+                  n_layers*(n_batch * n_seq * (4 * n_head * d_head + n_head * n_seq + 2*d_model + 2*d_ffn) +\
                     n_norms * (n_batch * n_seq * d_model)) +\
-                  (n_batch * n_seq * n_vocab)) * 2 [bytes]
+                  (n_batch * n_seq * 2*n_vocab)) * 2 [bytes]
 
 #### Backward   
 
     O(backward) = O(forward)
 
-Use llama2-7b as example, 
+Use llama2-7b as example, where n_vocab=32000, d_model=4096, n_head=32, d_model=d_head*n_head, d_ffn=11008, 
+n_blocks=32, n_batch=12, n_seq=64
+    
+    O(llama2) = O(parameters) + O(forward) + O(backword) = 104G + 3G + 3G
+
+
+
+## 3. Lora model memory usage          
+With Lora, the trainable parameters significantly reduced, usually 0.6% of model parameters.
+### parameters occupancy
+
+    since few trainable parameters, the gradients/adam states parameters are negligible.
+
+    O(parameters) = N_parameters*2 [bytes]
+    (N_paramters=N, N is the number of model parameters)
+    total memory usage is 2N (bytes). With a llama2-7b, it becomes 14G
+
+### activations occupancy
+#### Forward
+
+    O(forward) = (n_batch * n_seq * d_model +\
+                  n_layers*(n_batch * n_seq * (4 * n_head * d_head + n_head * n_seq + 2*d_model + 2*d_ffn) +\
+                    n_norms * (n_batch * n_seq * d_model)) +\
+                  (n_batch * n_seq * 2*n_vocab)) * 2 [bytes]
+
+#### Backward
+
+    O(forward) becomes negligible as few trainable parameters.
+
+Use llama2-7b-lora as example, where n_vocab=32000, d_model=4096, n_head=32, d_model=d_head*n_head, d_ffn=11008, 
+n_blocks=32, n_batch=12, n_seq=64
+    
+    O(llama2_lora) = O(parameters) + O(forward) + O(backword) ~= 14G + 3G, about 17G.
