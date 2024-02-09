@@ -47,11 +47,13 @@ In training, due to Adam widely used, the memory usage is actually far more than
     1) use fp32 datatype
     O(parameters) = (N_parameters + N_grad + N_adamm + N_adamv) * 4 [bytes]
     (N_paramters/N_grad/N_adamm/N_adamv=N, N is the number of model parameters)
+
     total memory usage is 16N (bytes). With a llama2-7b, it becomes 104G
 
     2) use mixed datatype
     O(parameters) = N_parameters*2 + N_grad*2 + N_adamm*4 + N_adamv*4 + N_parameters*4 [bytes]
     (N_paramters/N_grad/N_adamm/N_adamv=N, N is the number of model parameters)
+
     total memory usage is 16N (bytes). With a llama2-7b, it becomes 104G
 
 ### activations occupancy
@@ -112,6 +114,7 @@ With Lora, the trainable parameters significantly reduced, usually <0.6% of mode
 
     O(parameters) = N_parameters*2 + N_grad*2 + N_adamm*4 + N_adamv*4 + N_lora*4 [bytes]
     (N_paramters=N, N_grad/N_adamm/N_adamv/N_lora=N*0.6%, N is the number of model parameters)
+
     total memory usage is 2N+0.7N (bytes). With a llama2-7b, it becomes 19G
 
 
