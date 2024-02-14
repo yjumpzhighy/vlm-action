@@ -103,6 +103,8 @@ Use llama2-7b as example, where n_vocab=32000, d_model=4096, n_head=32, d_model=
 n_blocks=32, n_batch=12, n_seq=64
     
     O(llama2) = O(parameters) + O(forward) + O(backword) = 104G + 3G + 3G
+    (However, n_seq and n_batch now get larger and larger! for 128 batch and 512 sequence length, 
+     O(forward) surges to 240G and O(llama2) surges to 580G!)
 
 
 
@@ -134,3 +136,40 @@ Use llama2-7b-lora as example, where n_vocab=32000, d_model=4096, n_head=32, d_m
 n_blocks=32, n_batch=12, n_seq=64
     
     O(llama2_lora) = O(parameters) + O(forward) + O(backword) ~= 14G + 3G, about 17G.
+
+
+## 4. Deepspeed+lora model memory usage
+Deepspeed is a deep learning optimization library for distributed training. For straight forward quantitative
+analyze on memory usage, we utilze zero3 + lora as example. 
+### one gpu
+As known, deepspeed is for distributed training. However, it would also optimize the single GPU training pipeline.
+1) The deepspeed init would optimize the model, mainly cast fp32 to fp16 to reduce parameters size.
+2) deepspeed would also integrate memory fragmentations, boost memory efficiency.
+
+Use llama2-7b-lora as example, where n_vocab=32000, d_model=4096, n_head=32, d_model=d_head*n_head, d_ffn=11008, 
+n_blocks=32, n_batch=12, n_seq=64. As lora leaves few optimizer states, ignore.
+Raw model: 26G (fp32)
+Training MA peak: 38G
+
+After deepspeed init: 13G (fp16)
+Training MA peak: 21G
+
+### multi gpu (one node)
+zero3 would partition model weights as well as optimizer states onto gpus, ensuring each gpu keeps only a section.
+1) partition linearly reduce memory usage for the model parameters and optimizer state, because ZeRO-3 partitions 
+those across the available GPUs.
+2) usage at other points represents consumption by input data, activations, gradients, intermediate buffers, and 
+fragmentation resulting from PyTorch computation. ZeRO3 does not affect the memory consumed by these buffers.
+3) collect partitioned model parameters and optimizer states take extra memory cost.
+
+Use llama2-7b-lora as example, where n_vocab=32000, d_model=4096, n_head=32, d_model=d_head*n_head, d_ffn=11008, 
+n_blocks=32, n_batch=12, n_seq=64. As lora leaves few optimizer states, ignore. On 4 GPUs.
+Raw model: 26G (fp32)
+After deepspeed init: 6G per gpu (fp16)
+Training MA peak: 26G
+(Note: above example shows 20G intermediate memory usage. compared to zero2, conclude that extra 10G is used for
+collect process)
+
+
+
+
