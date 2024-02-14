@@ -2,6 +2,9 @@ import os
 import torch
 import torch.nn as nn
 from torch.cuda.amp import GradScaler, autocast
+from torch.nn.modules.loss import CrossEntropyLoss
+import torch.distributed as dist
+
 from transformers import (AutoModelForCausalLM, AutoConfig, AutoModel, AutoTokenizer,
                           BitsAndBytesConfig, pipeline, logging,
                           get_linear_schedule_with_warmup, Trainer,
@@ -11,17 +14,17 @@ import random
 import numpy as np
 from trl import SFTTrainer
 from peft import LoraConfig, get_peft_model, TaskType
-from utils import TwitterComplaintDataset, parse_args, get_optimizer_grouped_parameters, convert_linear_layer_to_lora
-import torch.distributed as dist
+from utils import TwitterComplaintDataset, parse_args, get_optimizer_grouped_parameters, convert_linear_layer_to_lora, print_gpu_utilization
+
 import deepspeed
 from deepspeed import get_accelerator
 from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
 import math
 from tqdm import tqdm
-from torch.nn.modules.loss import CrossEntropyLoss
+
 
 #"meta-llama/Llama-2-7b-chat-hf" #'bigscience/bloomz-560m' #"NousResearch/Llama-2-7b-chat-hf"
-base_model_name = "meta-llama/Llama-2-7b-chat-hf"
+base_model_name = "bigscience/bloomz-560m"
 learning_rate = 8e-4
 num_train_epochs = 30
 
@@ -45,6 +48,7 @@ def get_ds_config(filepath):
 
 def main():
     args = parse_args()
+    
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -53,21 +57,27 @@ def main():
     torch.backends.cudnn.deterministic = True
     get_accelerator().manual_seed_all(args.seed)
 
-    torch.distributed.init_process_group(backend='nccl')
-    local_rank = 0
+
+    get_accelerator().set_device(args.local_rank)
+    device = torch.device(get_accelerator().device_name(), args.local_rank)
+    deepspeed.init_distributed()
+    # dist get_rank() is same as deepspeed local_rank
     global_rank = torch.distributed.get_rank()
     world_size = torch.distributed.get_world_size()
-    #device = torch.device(get_accelerator().device_name(), local_rank)
-    if use_deepspeed:
-        get_accelerator().set_device(local_rank)
-        deepspeed.init_distributed()
 
     ds_config = get_ds_config(
-        os.path.join(os.getcwd(), "deepspeed_zero2_no_offload.json"))
+        os.path.join(os.getcwd(), "deepspeed_config.json"))
     ds_config['train_batch_size'] = ds_config['train_micro_batch_size_per_gpu'] * world_size *\
                                     ds_config['gradient_accumulation_steps']
-    zero_offload = ds_config['zero_optimization']['offload_optimizer'][
-        'device'] != 'none'
+   
+    if 'offload_optimizer' not in ds_config['zero_optimization'].keys():
+        zero_offload = False
+    elif ds_config['zero_optimization']['offload_optimizer']['device'] != 'none':
+        zero_offload = True
+    else:
+        zero_offload = False
+
+    torch.distributed.barrier()
 
     tokenizer = AutoTokenizer.from_pretrained(base_model_name,
                                               trust_remote_code=True,
@@ -77,12 +87,9 @@ def main():
     tokenizer.padding_side = "right"
 
     model = AutoModelForCausalLM.from_pretrained(base_model_name,
-                                                 torch_dtype=torch.float16,
+                                                 torch_dtype=torch.float32,
                                                  return_dict=True)
-    model.enable_input_require_grads()
-
     
-    # enable_lora:
     # peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM,
     #                                     target_modules = lora_replace_module,
     #                                     inference_mode=False,
@@ -99,51 +106,40 @@ def main():
         lora_replace_module,
         lora_dim=lora_r,
         lora_droppout=lora_dropout)
-
     model = model.cuda()
 
     dataset = TwitterComplaintDataset(tokenizer, "")
     dataloader = torch.utils.data.DataLoader(
         dataset,
+        sampler=torch.utils.data.distributed.DistributedSampler(dataset),
         batch_size=ds_config['train_micro_batch_size_per_gpu'],
-        num_workers=2,
-        shuffle=True,
     )
 
     # optimizer
-    optimizer_grouped_parameters = model.parameters()
-    if use_deepspeed and zero_offload:
+    optimizer_grouped_parameters = get_optimizer_grouped_parameters(model)
+    if zero_offload:
         optimizer = DeepSpeedCPUAdam(optimizer_grouped_parameters,
                                      lr=learning_rate,
                                      betas=(0.9, 0.95))
-    elif use_deepspeed:
+    else:
         optimizer = FusedAdam(optimizer_grouped_parameters,
                               lr=learning_rate,
                               betas=(0.9, 0.95))
-    else:
-        optimizer = torch.optim.Adam(optimizer_grouped_parameters,
-                                     lr=learning_rate)
-
-
-
-
+    
+    criterior = CrossEntropyLoss(reduction='none')
     lr_scheduler = get_scheduler(name = "cosine",
                                  optimizer = optimizer,
                                  num_warmup_steps = 0,
                                  num_training_steps = num_train_epochs *\
                                      math.ceil(len(dataloader)/ds_config['gradient_accumulation_steps'])
                                 )
-    
-    if use_deepspeed:
-        model, optimizer, _, lr_scheduler = deepspeed.initialize(
-            model=model,
-            optimizer=optimizer,
-            config=ds_config,
-            lr_scheduler=lr_scheduler,
-            dist_init_required=True)
 
-    #train
-    criterior = CrossEntropyLoss(reduction='none')
+    model, optimizer, _, lr_scheduler = deepspeed.initialize(
+        model=model,
+        optimizer=optimizer,
+        config=ds_config,
+        lr_scheduler=lr_scheduler,
+        dist_init_required=True)
 
     # mix precision
     scaler = GradScaler()
@@ -152,41 +148,29 @@ def main():
         model.train()
         for batch in tqdm(dataloader, desc="train", leave=False):
             input = {k: v.cuda() for k, v in batch.items()}
-            
-            with autocast():
-                # [batch, token_len, vocab_len]
-                outputs = model(input_ids=input['input_ids'],
-                                attention_mask=input['attention_mask'])
 
+            # [batch, token_len, vocab_len]
+            outputs = model(input_ids=input['input_ids'],
+                            attention_mask=input['attention_mask'])
 
-                logits = outputs.logits[:, :-1, :]
-                labels = input['labels'][:, 1:]
-                mask = (labels > 0).bool()
+            logits = outputs.logits[:, :-1, :]
+            labels = input['labels'][:, 1:]
+            mask = (labels > 0).bool()
 
-                loss = torch.mean(
-                    criterior(logits.permute(0, 2, 1), labels.long())[mask])
+            loss = torch.mean(
+                criterior(logits.permute(0, 2, 1), labels.long())[mask])
 
-                epoch_loss = loss.detach().float()
+            epoch_loss = loss.detach().float()
 
-
-                if use_deepspeed:
-                    model.backward(loss)
-                    model.step()
-                else:
-                    optimizer.zero_grad()
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
-                    lr_scheduler.step()
-
+            model.backward(loss)
+            model.step()
 
         print("=======>epoch loss:", epoch_loss)
 
 
     #evaluate
     if global_rank == 0:
-        if use_deepspeed:
-            model = model.module
+        model = model.module
             
         model.eval()
         model.config.end_token_id = tokenizer.eos_token_id
