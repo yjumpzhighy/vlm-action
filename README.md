@@ -28,6 +28,12 @@ Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning 
 Talk about how to utilize zero on large model training, and, how to apply deepspeed within your train pipeline.    
 [3.2.1 deepspeed overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/zero_overview.md)   
 
+  #single gpu
+  deepspeed --num_gpus 1 training/llama2_clm_sft_lora_with_zero.py
+  #multi gpus
+  deepspeed training/llama2_clm_sft_lora_with_zero.py
+
+
 
 
 
