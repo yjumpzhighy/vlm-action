@@ -8,18 +8,18 @@ Brief tutorial vision-launguage large model related works: modeling, finetune, p
 
 ## 2. Finetune
 Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning v2, lora. 
+[2.1 finetune methods overivew](https://github.com/yzy-jumphigh/vlm-action/blob/main/finetune/overview.md) 
 
-[2.1 Introduce to finetune methods doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/finetune/overview.md) 
+    #lora
+    python finetune/llama2_lora.py
+    #prefix
+    python finetune/llama2_prefix.py
+    #ptune-v2
+    python finetune/llama2_ptune_v2.py
+    #prompt
+    python finetune/llama2_prompt.py
 
-[2.2 lora with llama2 pytorch code](https://github.com/yzy-jumphigh/vlm-action/blob/main/finetune/llama2_lora.py) 
-
-[2.3 prefix with llama2 pytorch code](https://github.com/yzy-jumphigh/vlm-action/blob/main/finetune/llama2_prefix.py) 
-
-[2.4 ptune-v2 with llama2 pytorch code](https://github.com/yzy-jumphigh/vlm-action/blob/main/finetune/llama2_ptune_v2.py) 
-
-[2.5 prefix with llama2 pytorch code](https://github.com/yzy-jumphigh/vlm-action/blob/main/finetune/llama2_prompt.py) 
-
-## 3. Parallel Training
+## 3. Training
 
 ### 3.1 Tensor parallel
 
