@@ -141,7 +141,7 @@ n_blocks=32, n_batch=12, n_seq=64
 ## 4. Deepspeed+lora model memory usage
 Deepspeed is a deep learning optimization library for distributed training. For straight forward quantitative
 analyze on memory usage, we utilze zero3 + lora as example. 
-### one gpu
+### single gpu
 As known, deepspeed is for distributed training. However, it would also optimize the single GPU training pipeline.
 1) The deepspeed init would optimize the model, mainly cast fp32 to fp16 to reduce parameters size.
 2) deepspeed would also integrate memory fragmentations, boost memory efficiency.
