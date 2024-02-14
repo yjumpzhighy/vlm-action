@@ -11,6 +11,7 @@ Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning 
 
 2.1 [finetune methods overivew](https://github.com/yzy-jumphigh/vlm-action/blob/main/finetune/overview.md)  
 2.2 run commands
+
     #lora
     python finetune/llama2_lora.py
     #prefix
@@ -19,6 +20,7 @@ Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning 
     python finetune/llama2_ptune_v2.py
     #prompt
     python finetune/llama2_prompt.py
+
 2.3 [lora memory quantitative analysis](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/memory_quantitative_analysis.md)
     
 ## 3. Training
@@ -31,6 +33,7 @@ Talk about how to utilize zero on large model training, and, how to apply deepsp
 3.2.1 [deepspeed overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/zero_overview.md)   
 
 3.2.2 run commands
+
     #single gpu
     deepspeed --num_gpus 1 training/llama2_clm_sft_lora_with_zero.py
     #multi gpus
