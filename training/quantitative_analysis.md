@@ -148,11 +148,12 @@ As known, deepspeed is for distributed training. However, it would also optimize
 
 Use llama2-7b-lora as example, where n_vocab=32000, d_model=4096, n_head=32, d_model=d_head*n_head, d_ffn=11008, 
 n_blocks=32, n_batch=12, n_seq=64. As lora leaves few optimizer states, ignore.
-Raw model: 26G (fp32)
-Training MA peak: 38G
+   
+    Raw model: 26G (fp32)
+    Training MA peak: 38G
 
-After deepspeed init: 13G (fp16)
-Training MA peak: 21G
+    After deepspeed init: 13G (fp16)
+    Training MA peak: 21G
 
 ### multi gpu (one node)
 zero3 would partition model weights as well as optimizer states onto gpus, ensuring each gpu keeps only a section.
@@ -164,11 +165,16 @@ fragmentation resulting from PyTorch computation. ZeRO3 does not affect the memo
 
 Use llama2-7b-lora as example, where n_vocab=32000, d_model=4096, n_head=32, d_model=d_head*n_head, d_ffn=11008, 
 n_blocks=32, n_batch=12, n_seq=64. As lora leaves few optimizer states, ignore. On 4 GPUs.
-Raw model: 26G (fp32)
-After deepspeed init: 6G per gpu (fp16)
-Training MA peak: 26G
-(Note: above example shows 20G intermediate memory usage. compared to zero2, conclude that extra 10G is used for
-collect process)
+
+    Raw model: 26G (fp32)
+    After deepspeed init: 6G per gpu (fp16)
+    Training MA peak: 26G
+    (Note: above example shows 20G intermediate memory usage. compared to zero2, conclude that extra 10G is used for
+     collect process)
+
+
+
+
 
 
 
