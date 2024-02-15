@@ -1,5 +1,4 @@
 
-
 # RAG: Retrieval,Augmented,Generate
 RAG is technique aiming at optimize llm output, forcing the model to retrieval info from provided 
 dataset as reference to generate final query response. Generally include 4 steps: 
@@ -29,8 +28,14 @@ we use llama2 to ask about an autonomous driving tech startup company autox as e
 
 When direct ask llama2 about autox, it responds autox is an EV company while giving sufficent specious and 
 groundless details, wrong answers!!! 
+
 With RAG, we provided some autox news and inject into the prompt, the llama2 responds autox is an autonomous 
 company with detailed facts, from the web news provided, right answers!!! 
+
+
+
+
+
 
 
 
