@@ -1,4 +1,5 @@
-# 1. optimizer states.
+# Deepspeed
+  ## 1.optimizer states.
       #USE a linear layer, diff the sgd/adam states parameters:    
       
       #SGD optimizer
@@ -29,7 +30,7 @@
 
 
 
-# 2. deepspeed overview 
+  ## 2. deepspeed overview 
       config = {
         "train_batch_size": 16,
         "steps_per_print": 2000,
@@ -96,14 +97,14 @@
           optimizer = DeepSpeedZeRoOffload()
 
         
-# 3. deepspeed stage2
-Stage 1,2 focus on segment model gradients and optimizer states. Idealy, each process (GPU) keeps partial of the  
-gradients and optimizer states, and do broadcast when necessary, to reduce the GPU memory usage.  
-Also, cpu offload is supported as well.   
-     
-In the optimizer, params_group will be segmented, thus each process keeps current belonging parameters and delete   
-the rest. This strategy ensure only current part of gradient will be calcuated and stored, same with the optimzier   
-states.    
+  ## 3.deepspeed stage2
+  Stage 1,2 focus on segment model gradients and optimizer states. Idealy, each process (GPU) keeps partial of the  
+  gradients and optimizer states, and do broadcast when necessary, to reduce the GPU memory usage.  
+  Also, cpu offload is supported as well.   
+      
+  In the optimizer, params_group will be segmented, thus each process keeps current belonging parameters and delete   
+  the rest. This strategy ensure only current part of gradient will be calcuated and stored, same with the optimzier   
+  states.    
 
         #in each optimizer.param_groups, perform round_robin distribute. for examaple, to partition into n parts:
         #usually n is the world_size (usually gpus) in the group
@@ -158,17 +159,17 @@ states.
         optimizer.param_groups[0]['params'] = [partitions[partition_id].to(device).clone().float().detach()]
         optimizer.param_groups[0]['params'].requires_grad = True
 
-# 4. deepspeed stage3
-Stage 3 focus on segment model gradients, optimizer states, as well as model weights. Idealy, each process (GPU) keeps    
-partial  of the gradients and optimizer states and model parameters, and do broadcast when necessary, to reduce the GPU    
-memory usage.     
-Also, cpu offload is supported as well.     
-     
-In the model, weights will be segmented, thus each process keeps current belonging weights and delete the rest.    
-This strategy ensure only current model weights will be calcuated and stored.    
-     
-Since model weights get partitioned, thus in each process, its optimzier states "partitioned" natually without extra    
-operations.     
+  ## 4.deepspeed stage3
+  Stage 3 focus on segment model gradients, optimizer states, as well as model weights. Idealy, each process (GPU) keeps    
+  partial  of the gradients and optimizer states and model parameters, and do broadcast when necessary, to reduce the GPU    
+  memory usage.     
+  Also, cpu offload is supported as well.     
+      
+  In the model, weights will be segmented, thus each process keeps current belonging weights and delete the rest.    
+  This strategy ensure only current model weights will be calcuated and stored.    
+      
+  Since model weights get partitioned, thus in each process, its optimzier states "partitioned" natually without extra    
+  operations.     
 
         #model weights convert
         param_list = module.parameters(recurse=True)  
@@ -193,3 +194,4 @@ operations.
         #FWD/BWD
         def setup_zero_stage3_hooks():
             #do register hooks for restore/release weights
+
