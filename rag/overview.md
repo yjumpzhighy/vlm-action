@@ -49,6 +49,7 @@ In "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflecti
 ### 3.1 child-parent recursive retriever
 Instead of large-size chunk (parent chunk), use small chunk (child chunk) for retrieval. Then use its's 
 corresponding large-size chunk (parent chunk) for sythetizer. 
+
 In another word, documents text are indexed into retrieval and sythesis stores seperately, while keep their
 nodes' index relations. In retrieval store, documents text divided into small chunks for better relevant sentences
 locating. In systhesis store, documents text divided into large chunks to provide sufficient LLM input content.
