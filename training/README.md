@@ -199,7 +199,7 @@
 
 # Memory quantitative analysis
   ## 1.Basic model parameters
-    A model usually consist of (embedding, encoder/decoder, lm_head).
+  A model usually consist of (embedding, encoder/decoder, lm_head).
   ### embedding 
   embedding layer is a look-up table, with parameters:
 
@@ -256,7 +256,8 @@
 
   ### activations occupancy
   PyTorch describe deep learning model as computation graph. Operation receive input tensor, do computation, 
-  output activation tensor to downstream operations. Those activation tensor will be remained, and occupy memory. 
+  output activation tensor to downstream operations. 
+  Those activation tensor will be remained, and occupy memory. 
   (Note inside an operation, some temp activations get created but released quickly, thus becomes negligible.)
   (Note we assume mixed precision mode below)
 
