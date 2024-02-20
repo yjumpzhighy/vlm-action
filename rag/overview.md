@@ -20,7 +20,7 @@ dataset as reference to generate final query response. Generally include 4 steps
            into prompt, feedinto the llm for response. 
 
 
-## raw rag usage
+## 1.raw rag
 raw rag usage is straightforward and simply following classic rag steps. 
 we use llama2 to ask about an autonomous driving tech startup company autox as example. 
 
@@ -34,14 +34,28 @@ company with detailed facts, from the web news provided, right answers!!!
 
 
 
+## 2.self-rag 
+raw rag is able to boost llm output quanlity (like hallucination) by augument input content. However, it 
+has following issues:
+1) the provided documents may be misleading and low-quanlity contents, resulting in inaccurte LLM answers.
+2) selected top k textnodes may not cover all required information.
+3) cosine similarity doesn't guarantee strong related context.
+4) unsatisfactory performance on complex task question.
 
+In "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection" (by Akari Asai, Zeqiu Wu, etc),
+"retrieval on demand" and "reflection tokens" strategies are used to optimize above issues.
 
+## 3.advanced rag
+### 3.1 child-parent recursive retriever
+Instead of large-size chunk (parent chunk), use small chunk (child chunk) for retrieval. Then use its's 
+corresponding large-size chunk (parent chunk) for sythetizer. 
+In another word, documents text are indexed into retrieval and sythesis stores seperately, while keep their
+nodes' index relations. In retrieval store, documents text divided into small chunks for better relevant sentences
+locating. In systhesis store, documents text divided into large chunks to provide sufficient LLM input content.
 
+        python rag/advanced_rag_child_parent_retrieval.py
 
-
-
-
-
+### 3.2 
 
 
 
