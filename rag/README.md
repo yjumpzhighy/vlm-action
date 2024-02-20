@@ -19,8 +19,16 @@ dataset as reference to generate final query response. Generally include 4 steps
 4) Prompt: together with your query, the most similar context in the vector storage will be combined 
            into prompt, feedinto the llm for response. 
 
+Query results' quality from retriever is critical to RAG performance, the most common evalution
+metrics are Hit Rate and Mean Reciprocal Rank.
+HR: It calculates the fraction of queries where the correct answer is found within the top-k retrieved documents. 
+MRR: It computes a score indicating how high up in the list the first correctly retrieved document is. 
+     For each query, MRR looks at the rank of the highest-placed relevant document. Specifically, it's the average 
+     of the reciprocals of these ranks across all the queries. So, if the first relevant document is the top result, 
+     the reciprocal rank is 1; if it's second, the reciprocal rank is 1/2, and so on.
 
-## 1.raw rag
+
+## 1. raw rag
 raw rag usage is straightforward and simply following classic rag steps. 
 we use llama2 to ask about an autonomous driving tech startup company autox as example. 
 
@@ -34,7 +42,7 @@ company with detailed facts, from the web news provided, right answers!!!
 
 
 
-## 2.self-rag 
+## 2. self-rag 
 raw rag is able to boost llm output quanlity (like hallucination) by augument input content. However, it 
 has following issues:
 1) the provided documents may be misleading and low-quanlity contents, resulting in inaccurte LLM answers.
@@ -45,7 +53,7 @@ has following issues:
 In "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection" (by Akari Asai, Zeqiu Wu, etc),
 "retrieval on demand" and "reflection tokens" strategies are used to optimize above issues.
 
-## 3.advanced rag
+## 3. advanced rag
 ### 3.1 child-parent recursive retriever
 Instead of large-size chunk (parent chunk), use small chunk (child chunk) for retrieval. Then use its's 
 corresponding large-size chunk (parent chunk) for sythetizer. 
@@ -56,7 +64,19 @@ locating. In systhesis store, documents text divided into large chunks to provid
 
         python rag/advanced_rag_child_parent_retrieval.py
 
-### 3.2 
+### 3.2 reranker
+embedding similarity is relatively intuitive but not always accurate. During experiments, the top1 relevant document 
+is usually reliable, but top2 ~ top10 (if return 10 documents) documents usually not ranked by relevance.
+In another, the retrieved documents by embedding search are not always "actual top". And most importantly, the ranking 
+is not trustable.
+
+Hense, introducing reranker, which use preliminary retrieval results as input and optimize their ranking.
+
+        python rag/advanced_rag_rerank.py
+
+Note: common used rerankers like CohereRerank and bge-rerank-large shows satisfactory improvement in most QA tasks.
+
+
 
 
 
