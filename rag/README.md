@@ -41,7 +41,6 @@ With RAG, we provided some autox news and inject into the prompt, the llama2 res
 company with detailed facts, from the web news provided, right answers!!! 
 
 
-
 ## 2. self-rag 
 raw rag is able to boost llm output quanlity (like hallucination) by augument input content. However, it 
 has following issues:
@@ -52,6 +51,7 @@ has following issues:
 
 In "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection" (by Akari Asai, Zeqiu Wu, etc),
 "retrieval on demand" and "reflection tokens" strategies are used to optimize above issues.
+
 
 ## 3. advanced rag
 ### 3.1 child-parent recursive retriever
@@ -70,11 +70,29 @@ is usually reliable, but top2 ~ top10 (if return 10 documents) documents usually
 In another, the retrieved documents by embedding search are not always "actual top". And most importantly, the ranking 
 is not trustable.
 
-Hense, introducing reranker, which use preliminary retrieval results as input and optimize their ranking.
+Hense, introducing reranker, which use initial retrieval results as input and optimize their ranking.
 
         python rag/advanced_rag_rerank.py
 
 Note: common used rerankers like CohereRerank and bge-rerank-large shows satisfactory improvement in most QA tasks.
+
+### 3.3 multi-modality 
+TODO
+
+### 3.4 contextual compression
+When we divide document blocks, we often do not know the user's query. This means that the most relevant information to 
+the query may be hidden in a document containing a large amount of irrelevant text. Inputting this to LLM may result in 
+more expensive LLM calls and poorer responses.
+
+"Compression" refers to both compressing contents of document and filtering out documents. Contextual compression would
+ compress initial retrieval results using the context of the given query, and return only relevant information. 
+Generally include 3 steps: 
+1) contextual compression retriever passes queries to the base retriever and get retrieval results.
+2) takes the initial documents and passes them through the document compressor, which takes a list of documents and shortens 
+   it by reducing the contents of documents or dropping documents altogether.
+3) return compressed content and your query combined into prompt, feedinto the llm for response. 
+
+
 
 
 
