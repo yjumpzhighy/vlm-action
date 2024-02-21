@@ -126,7 +126,7 @@ retriever = ContextualCompressionRetriever(
 template = """
 [INST] <>
 Act as a investment analyst who search latest news.
-Use the following information to answer the question at the end.
+Use the context to answer the question at the end.
 <>
 
 {context}
