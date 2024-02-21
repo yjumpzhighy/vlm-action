@@ -113,7 +113,7 @@ vector_db = Chroma.from_documents(texts_chunks,
 template = """
 [INST] <>
 Act as a investment analyst who search latest news.
-Use the following information to answer the question at the end.
+Use the context to answer the question at the end.
 <>
 
 {context}
@@ -133,5 +133,3 @@ qa_chain = RetrievalQA.from_chain_type(
 
 result_ = qa_chain("How about the company AutoX?")
 print(result_["result"].strip())
-
-
