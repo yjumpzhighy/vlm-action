@@ -118,27 +118,10 @@ retriever.add_documents(documents)
 
 
 
-
-
-# texts_chunks = child_splitter.split_documents(documents)
-# # for chunk in texts_chunks:
-# #     print(len(chunk.page_content))
-
-# # construct vector storage
-# vector_db = Chroma.from_documents(texts_chunks, 
-#                                   HuggingFaceEmbeddings(
-#                                     model_name="thenlper/gte-large",
-#                                     model_kwargs={"device": "cuda"},
-#                                     encode_kwargs={"normalize_embeddings": True},
-#                                   ), 
-#                                   #persist_directory="db"
-# )
-
-
 template = """
 [INST] <>
 Act as a investment analyst who search latest news.
-Use the following information to answer the question at the end.
+Use the context to answer the question at the end.
 <>
 
 {context}
