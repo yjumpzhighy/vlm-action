@@ -120,11 +120,18 @@ documents that are relevant to the query and that have been ranked by the differ
         python rag/advanced_rag_merge_retrievers.py
 
 
-### 3.6
+### 3.6 query transform
+TODO
+
+
+### 3.7 
 
 
 
 
+### 3.8 overview
+Improved retrieved documents releavance: compression, child-parent, merge retrievers
+Improved retrieved documents order: rerank, merge retrievers(reorder)
 
 
 
