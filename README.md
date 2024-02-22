@@ -43,7 +43,7 @@ How effective LORA would be?
 
 
 ## 4. RAG
-rag is able to alleviate LLMs hallucination issue, while benefits from data security and avoide finetune process.
+rag is able to alleviate LLMs hallucination issue, while benefits from data security and avoide finetune process.  
 [rag overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/rag/README.md)   
 
     # raw rag
