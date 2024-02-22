@@ -6,43 +6,58 @@ Brief tutorial vision-launguage large model related works: modeling, finetune, p
 ## 1. Modeling
 (TO BE UPDATED)
 
-## 2. Finetune
-Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning v2, lora. 
 
-2.1 [finetune methods overivew](https://github.com/yzy-jumphigh/vlm-action/blob/main/finetune/overview.md)  
-2.2 run commands
-
-    #lora
-    python finetune/llama2_lora.py
-    #prefix
-    python finetune/llama2_prefix.py
-    #ptune-v2
-    python finetune/llama2_ptune_v2.py
-    #prompt
-    python finetune/llama2_prompt.py
-
-2.3 [lora memory quantitative analysis](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/memory_quantitative_analysis.md)
-    
-## 3. Training
-
-### 3.1 Tensor parallel
-
-
-### 3.2 Deepspeed
+## 2. Training
+### 2.1 Deepspeed
 Talk about how to utilize zero on large model training, and, how to apply deepspeed within your train pipeline.    
-3.2.1 [deepspeed overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/zero_overview.md)   
-
-3.2.2 run commands
+[deepspeed overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/README.md)   
 
     #single gpu
     deepspeed --num_gpus 1 training/llama2_clm_sft_lora_with_zero.py
     #multi gpus
     deepspeed training/llama2_clm_sft_lora_with_zero.py
 
-3.2.3 [deepspeed memory quantitative analysis](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/memory_quantitative_analysis.md)
+[Deepspeed memory quantitative analysis](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/README.md)
 
 
+## 3. Finetune
+Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning v2, lora. 
+[finetune methods overivew](https://github.com/yzy-jumphigh/vlm-action/blob/main/finetune/README.md)  
 
+    #lora
+    python finetune/llama2_lora.py
+
+    #prefix
+    python finetune/llama2_prefix.py
+
+    #ptune-v2
+    python finetune/llama2_ptune_v2.py
+
+    #prompt
+    python finetune/llama2_prompt.py
+
+[LORA memory quantitative analysis](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/README.md)
+    
+
+
+## 4. RAG
+rag is able to alleviate LLMs hallucination issue, while benefits from data security and avoide finetune process.
+[rag overview doc](https://github.com/yzy-jumphigh/vlm-action/blob/main/rag/README.md)   
+
+    # raw rag
+    python rag/raw_rag.py
+
+    # child-parents documents retrieval rag
+    python rag/advanced_rag_child_parent_retrieval.py
+
+    # reranker rag
+    python rag/advanced_rag_rerank.py
+
+    # contextual compression rag 
+    python rag/advanced_rag_compression.py
+
+    # merged retrievers rag
+    python rag/advanced_rag_merge_retrievers.py
 
 
 
