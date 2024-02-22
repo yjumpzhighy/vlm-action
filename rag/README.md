@@ -85,14 +85,19 @@ the query may be hidden in a document containing a large amount of irrelevant te
 more expensive LLM calls and poorer responses.
 
 "Compression" refers to both compressing contents of document and filtering out documents. Contextual compression would
- compress initial retrieval results using the context of the given query, and return only relevant information. 
+compress initial retrieval results using the context of the given query, and return only relevant information. 
 Generally include 3 steps: 
 1) contextual compression retriever passes queries to the base retriever and get retrieval results.
 2) takes the initial documents and passes them through the document compressor, which takes a list of documents and shortens 
    it by reducing the contents of documents or dropping documents altogether.
 3) return compressed content and your query combined into prompt, feedinto the llm for response. 
 
+        python rag/advanced_rag_compression.py
 
+        # compressor pipeline uses compressor(pretrained llm model) to extract key content, relevant_filter to filter
+        # out embeddings with low similarity, redundant_filter to filter out duplicate output documents.
+
+Note: in experiment, notice that adding compressor would add additional noise to final answer, requires carefully finetuning.
 
 
 
