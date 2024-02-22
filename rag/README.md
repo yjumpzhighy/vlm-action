@@ -60,7 +60,7 @@ corresponding large-size chunk (parent chunk) for sythetizer.
 
 In another word, documents text are indexed into retrieval and sythesis stores seperately, while keep their
 nodes' index relations. In retrieval store, documents text divided into small chunks for better relevant sentences
-locating. In systhesis store, documents text divided into large chunks to provide sufficient LLM input content.
+locating. In systhesis store, documents text divided into large chunks to provide sufficient LLM input context.
 
         python rag/advanced_rag_child_parent_retrieval.py
 
@@ -98,6 +98,31 @@ Generally include 3 steps:
         # out embeddings with low similarity, redundant_filter to filter out duplicate output documents.
 
 Note: in experiment, notice that adding compressor would add additional noise to final answer, requires carefully finetuning.
+
+
+### 3.5 middle augment
+llm generally shows "lost in the middle" phenomenon, as LLMs are more  likely to recall information positioned 
+at the start or end of an input, with a tendency to overlook content in the middle.
+
+"LIM" also exists in rag. for example, if retrieved document with answer positioned at start or end of the returned documents 
+list, the final output answer would be more accurate. 
+
+However, there is no mature solution at the moment, what we can do is refine the retrieved documents quality and rank 
+"answer document"to the top, which is the key position utilizing "LIM" phenomenon. (sounds like reranking, right?)
+
+Rather than reranking, another technique called "Lord of the Retrievers" (also known as MergerRetriever), takes a list of 
+retrievers as input and merges the results of their get_relevant_documents() methods into a single list. Thus get a list of 
+documents that are relevant to the query and that have been ranked by the different retrievers.
+1) it can combine the results of multiple retrievers, which can help to reduce the risk of bias in the results.
+2) it can rank the results of the different retrievers, which can help to ensure that the most relevant documents are 
+   returned first.
+
+        python rag/advanced_rag_merge_retrievers.py
+
+
+### 3.6
+
+
 
 
 
