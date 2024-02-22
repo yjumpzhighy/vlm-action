@@ -17,6 +17,7 @@ Talk about how to utilize zero on large model training, and, how to apply deepsp
     #multi gpus
     deepspeed training/llama2_clm_sft_lora_with_zero.py
 
+How effective deepspeed would be?
 [Deepspeed memory quantitative analysis](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/README.md)
 
 
@@ -36,6 +37,7 @@ Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning 
     #prompt
     python finetune/llama2_prompt.py
 
+How effective LORA would be?
 [LORA memory quantitative analysis](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/README.md)
     
 
