@@ -11,6 +11,7 @@ space is explictly represented, continuous and structured, allowing for smooth i
    normalize to 0~1 for image generation.
 4) loss function KL(N(u(Z),var(Z)) || N(0,I)), aims at making the encoder output distribution 
    approaching standard normal distribution.
+   
 	'''python
 	#Why? we need keep the noise of Z. 
 	#without noise, latent space lacks variability, and decoder may produce only a limited 
@@ -22,6 +23,7 @@ space is explictly represented, continuous and structured, allowing for smooth i
    	#during training, and degrade vae to auto-encoder. thus latent space representations can't 
    	#adequately represent the diversity of the input data.
 	'''
+
 6) loss function ||X-X*||^2, aims at minimize the difference between input and output.
 
 7) run script
