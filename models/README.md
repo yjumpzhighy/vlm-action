@@ -28,8 +28,8 @@ space is explictly represented, continuous and structured, allowing for smooth i
       python models/vae/vae.py
       // without training, the decoder produces continuous but meanless handwrite figures.
       // after training, the decoder produces continuous and meanful handwrite figures.
-   <img src="../assets/vae_chaos.png" width="800" />
-   <img src="../assets/vae_trained.png" width="800" />
+   <img src="../assets/vae_chaos.png" width="400" />
+   <img src="../assets/vae_trained.png" width="400" />
 
 
 
