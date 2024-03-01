@@ -10,7 +10,8 @@ space is explictly represented, continuous and structured, allowing for smooth i
 3) decoder takes Z and decodes(mlp) to feature vectors of same size as input. With sigmoid,
    normalize to 0~1 for image generation.
 4) loss function KL(N(u(Z),var(Z)) || N(0,I)), aims at making the encoder output distribution 
-   approaching standard normal distribution. 
+   approaching standard normal distribution.
+
    '''
    //Why? we need keep the noise of Z 
    //without noise, latent space lacks variability, and decoder may produce only a limited 
@@ -21,9 +22,10 @@ space is explictly represented, continuous and structured, allowing for smooth i
    //during training, and degrade vae to auto-encoder. thus latent space representations can't 
    //adequately represent the diversity of the input data.
    '''
-5) loss function ||X-X*||^2, aims at minimize the difference between input and output.
 
-6) run script
+6) loss function ||X-X*||^2, aims at minimize the difference between input and output.
+
+7) run script
    '''
    python models/vae/vae.py
    // without training, the decoder produces continuous but meanless handwrite figures.
