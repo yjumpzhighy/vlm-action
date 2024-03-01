@@ -12,15 +12,15 @@ space is explictly represented, continuous and structured, allowing for smooth i
 4) loss function KL(N(u(Z),var(Z)) || N(0,I)), aims at making the encoder output distribution 
    approaching standard normal distribution.
 
-	#Why? we need keep the noise of Z
-	#without noise, latent space lacks variability, and decoder may produce only a limited
-   	#set of outputs and get poor interpolation performance.
+	#Why? we need keep the noise of Z 
+	#without noise, latent space lacks variability, and decoder may produce only a limited 
+   	#set of outputs and get poor interpolation performance. 
    	
 	Z = u + exp(logvar * 0.5) * eps 
-	(u,logvar is output of encoder, eps sampled from N(0,I))
+	(u,logvar is output of encoder, eps sampled from N(0,I)) 
    	#"exp(logvar*0.5)*eps" noise item tend tobe zero (logvar incline to negative infinity) 
    	#during training, and degrade vae to auto-encoder. thus latent space representations can't 
-   	#adequately represent the diversity of the input data.
+   	#adequately represent the diversity of the input data. 
 
 6) loss function ||X-X*||^2, aims at minimize the difference between input and output.
 
