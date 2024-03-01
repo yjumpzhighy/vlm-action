@@ -11,9 +11,9 @@ space is explictly represented, continuous and structured, allowing for smooth i
    normalize to 0~1 for image generation.
 4) loss function KL(N(u(Z),var(Z)) || N(0,I)), aims at making the encoder output distribution 
    approaching standard normal distribution.
-        
-        #Why? we need keep the noise of Z
-	#without noise, latent space lacks variability, and decoder may produce only a limited 
+
+	#Why? we need keep the noise of Z
+	#without noise, latent space lacks variability, and decoder may produce only a limited
    	#set of outputs and get poor interpolation performance.
    	
 	Z = u + exp(logvar * 0.5) * eps 
