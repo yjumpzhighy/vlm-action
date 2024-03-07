@@ -1,379 +1,164 @@
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
-from torch.nn.modules.normalization import GroupNorm
+from torch import optim
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from torchvision.datasets import MNIST
+import matplotlib.pyplot as plt
+import os
+import numpy as np
+from scipy.stats import norm
 
 
-import math
-from einops import reduce, rearrange
+class VAE(nn.Module):
+    def __init__(self,input_dim=28,embedding_dim=256,latent_dim=2):
+        super(VAE, self).__init__()
+        
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, embedding_dim),
+            nn.ReLU(),
+            nn.Linear(embedding_dim, latent_dim * 2)
+        )
+        
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, embedding_dim),
+            nn.ReLU(),
+            nn.Linear(embedding_dim, input_dim),
+            nn.Sigmoid()
+        )
+        
+    def reparameter(self,mean,logvar):
+        eps = torch.randn_like(mean)  #random sample from (0,1)
+        return mean + torch.exp(logvar * 0.5) * eps  # u + sqrt(var)*eps ~ N(u, var)
 
 
-
-class PositionalEmbedding(nn.Module):
-    def __init__(self,dmodel,scale=1.0):
-        super().__init__()
-        self.dmodel = dmodel #embedding dimension
-        self.scale = scale
-    def forward(self,time):
-        device = time.device
-        half_dmodel = self.dmodel // 2
-        embeddings = math.log(10000) / (half_dmodel-1)
-        embeddings = torch.exp(torch.arange(half_dmodel, device=device) * -embeddings)
-        embeddings = time[:, None] * embeddings[None, :]
-        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
-        return embeddings
-      
-class NormalizedConv2d(nn.Conv2d):
-    '''
-    replace wide resnet
-    '''        
     def forward(self,x):
-        eps = 1e-5
-        weight = self.weight
-        # [C_out,C_in,k,k] get mean/var along first dimension [C_out,1,1,1]
-        mean = torch.mean(weight, dim=(1,2,3),keepdim=True)
-        var = torch.var(weight, dim=(1,2,3),unbiased=False, keepdim=True)
-        # making weight distribution be N(0, I)
-        normalized_weight = (weight - mean) * (var + eps).rsqrt()
+        ori_size = x.size()
+        batch_size = ori_size[0]
         
-        return F.conv2d(x,
-                        normalized_weight,
-                        self.bias,
-                        self.stride,
-                        self.padding,
-                        self.dilation,
-                        self.groups)
+        x = x.view(batch_size, -1)
+        x = self.encoder(x)
+        mean, logvar = x.chunk(2, dim=1)
+        z = self.reparameter(mean, logvar)
         
-class Block(nn.Module):
-    def __init__(self, channel_in, channel_out, groups):
-        super().__init__()
-        self.channel_in = channel_in
-        self.channel_out = channel_out
-        self.conv = NormalizedConv2d(channel_in, channel_out, 3, padding=1)
-        self.norm = nn.GroupNorm(groups, channel_out) #?how about batch norm?
-        self.act = nn.SiLU()  #?how about relu
-        
-    def forward(self,x,scale_shift=None):
-        x = self.conv(x)
-        x = self.norm(x)
-        if scale_shift is not None:
-            scale, shift = scale_shift
-            x = x * (scale+1.0) + shift
-        x = self.act(x)
-        return x
+        x = self.decoder(z).view(ori_size)
+        return x, mean, logvar
+                
+    def get_kl_loss(self, mean, logvar):
+        kl_loss = -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp()) 
+        return kl_loss
     
-class ResBlock(nn.Module):
-    def __init__(self,channel_in,channel_out,time_embedding_channel,groups):
-        super().__init__()
-        
-        self.mlp = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(time_embedding_channel, channel_out * 2)
-        )
-        
-        self.block1 = Block(channel_in, channel_out, groups=groups)
-        self.block2 = Block(channel_out, channel_out, groups=groups)
-        
-        self.res_conv = nn.Conv2d(channel_in, channel_out, 1) if channel_in != channel_out\
-                        else nn.Identity()
-    def forward(self,x,time_embedding=None):
-        scale_shift = None
-        if time_embedding is not None:
-            time_embedding = self.mlp(time_embedding)
-            time_embedding = time_embedding[:, :, None, None]
-            scale_shift = time_embedding.chunk(2, dim=1)
-        
-        h = self.block2(self.block1(x, scale_shift))
-        return h + self.res_conv(x)
-    
-class MultiHeadsAttention(nn.Module):
-    def __init__(self,channel_in,heads=4,channel_head=32):
-        super().__init__()
-        self.scale = channel_head ** -0.5
-        self.heads = heads
-        self.channel_head = channel_head
-        hidden_dim = heads * channel_head
-        self.qkv = nn.Conv2d(channel_in, hidden_dim * 3, 1, bias=False) #linear?
-        self.ffn = nn.Conv2d(hidden_dim, channel_in, 1)  #linear?
-        self.softmax = nn.Softmax(dim=-1)
-        
-    def forward(self, x):
-        b,c,h,w = x.shape
-        # q,k,v = self.qkv(x).chunk(3, dim=1) #[b,heads*channel_head,h,w]
-        # q = q.view(b, self.heads, self.channel_head, h*w)  #[b,heads,channel_head,h*w]
-        # k = k.view(k, self.heads, self.channel_head, h*w)  #[b,heads,channel_head,h*w]
-        # v = v.view(v, self.heads, self.channel_head, h*w)  #[b,heads,channel_head,h*w]
-        
-        # qkv = self.qkv(x).reshape(b,N,3,self.num_heads,C//self.num_heads).permute(2,0,3,1,4)
-        # q,k,v = qkv[0],qkv[1],qkv[2] #[B,num_heads,Wh*Ww,C//num_heads]
-        
-        #[b,heads,h*w,channel_head]
-        q,k,v = self.qkv(x).reshape(b,3,self.heads,self.channel_head,h*w).permute(0,1,2,4,3).chunk(3,dim=1)
-        q = q * self.scale
-        attn = (q @ k.transpose(-2, -1)) #[b,heads,h*w,h*w]
-        
-        attn = self.softmax(attn) 
-        x = (attn @ v).transpose(-2,-1).reshape(b,-1,h,w) #[b,heads*channel_head,h,w]
-        x = self.ffn(x) #[b,c,h,w]
-        
-        return x
-  
-class Downsample(nn.Module):
-    '''
-    downsample H,W to H//2,W//2
-    '''
-    def __init__(self, channels_in, channels_out):
-        super().__init__()
-        #self.downsample = nn.Conv2d(channels_in, channels_in, 3, stride = 2, padding=1)
-        
-        self.downsample = nn.Conv2d(channels_in * 4, channels_out, 1)
-    def forward(self,x):
-        # x:(b,c,h,w)
-        b,c,h,w = x.shape
-
-        if h%2==1 or w%2==1:
-            raise ValueError("downsampling dimension must be even")
-        
-        x = x.view(b, c, h//2, 2, w//2, 2).permute(0, 1, 3, 5, 2, 4).contiguous().view(b, c*4, h//2, w//2)
-        return self.downsample(x)
-
-class Upsample(nn.Module):
-    '''
-    upsample H,W to 2H,2W
-    '''
-    def __init__(self, channel_in, channel_out):
-        super().__init__()
-        self.upsample = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="nearest"),
-            nn.Conv2d(channel_in, channel_out, 3, padding=1)
-        )
-    def forward(self,x):
-        return self.upsample(x)
-        
-        
-        
-        
+    def get_recon_loss(self, x, recon_x,):
+        recon_loss = F.binary_cross_entropy(recon_x,x,size_average=False)
+        return recon_loss
         
 
-    
-# class LinearAttention(nn.Module):
-#     def __init__(self,channel_in,heads=4,channel_head=32):
-#         super().__init__()
-#         self.scale = channel_head ** -0.5
-#         self.heads = heads
-#         self.channel_head = channel_head
-#         hidden_dim = heads * channel_head
-#         self.qkv = nn.Conv2d(channel_in, hidden_dim * 3, 1, bias=False)
-#         self.ffn = nn.Sequential(nn.Conv2d(hidden_dim, channel_in, 1),
-#                                  nn.GroupNorm(1, channel_in))
-        
-#     def forward(self, x):
-#         b,c,h,w = x.shape
-#         #[b,heads,h*w,channel_head]
-#         q,k,v = self.qkv(x).reshape(b,3,self.heads,self.channel_head,h*w).permute(0,1,2,4,3).chunk(3,dim=1)
-        
-#         q = q.softmax(dim=-2)
-#         k = k.softmax(dim=-1)
-        
-#         q = q * self.scale
-        
-   
-class UnetCondition(nn.Module):
-    def __init__(self, image_h=32, image_w=32, image_c=3, base_channel=64, channel_mults=(1,2,4,8), 
-                 self_condition=False, resnet_block_groups=8):
-        super().__init__()
-        
-        self.self_condition = self_condition
-        input_channel = image_c * (2 if self_condition else 1)
+# VAE unit test 
+if __name__ == "__main__":        
+    EPOCHS = 1000
+    BATCH_SIZE = 128
+    INPUT_DIM = 28 * 28
+    EMBEDDING_DIM = 128
+    LATENT_DIM = 2
 
-        self.stem = nn.Conv2d(input_channel, base_channel, 1, padding=0)
-        
-        channels = [base_channel] + [base_channel * m for m in channel_mults]
-        channels_in = channels[:-1]
-        channels_out = channels[1:]
-        
-        time_channel = base_channel * 4
-        self.time_mlp = nn.Sequential(
-            PositionalEmbedding(base_channel),
-            nn.Linear(base_channel, time_channel),
-            nn.GELU(),
-            nn.Linear(time_channel, time_channel),
-        )
-        
-        self.downs = nn.ModuleList([])
+    transform = transforms.Compose([transforms.ToTensor()])
+    data_train = MNIST(root='./data', train=True, download=False, transform=transform)
+    data_valid = MNIST(root='./data', train=False, download=False, transform=transform)
 
-        for ind in range(len(channels_in)):
-            is_last = ind==(len(channels_in)-1)
-            self.downs.append(
-                nn.ModuleList([
-                    ResBlock(channels_in[ind], channels_in[ind], time_channel, resnet_block_groups),
-                    ResBlock(channels_in[ind], channels_in[ind], time_channel, resnet_block_groups),
-                    nn.GroupNorm(1,channels_in[ind]),
-                    MultiHeadsAttention(channels_in[ind]),
-                    Downsample(channels_in[ind], channels_out[ind]) if not is_last 
-                        else nn.Conv2d(channels_in[ind], channels_out[ind], 3, padding=1)    
-                ])
-            )
+    train_loader = DataLoader(data_train, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+    test_loader = DataLoader(data_valid, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    model = VAE(INPUT_DIM, EMBEDDING_DIM, LATENT_DIM)
+    model.to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-2)
+
+    best_loss = 1e9
+    best_epoch = 0
+
+    valid_losses = []
+    train_losses = []
+
+    for epoch in range(EPOCHS):
+        model.train()
+        train_loss = 0.
+        train_num = len(train_loader.dataset)
+
+        d = None
+        for idx, (x, _) in enumerate(train_loader):
+            batch = x.size(0)
+            x = x.to(device)
+            recon_x, mu, logvar = model(x)
+            d = logvar
             
-        self.mids = nn.ModuleList([])
-        self.mids.append(
-            nn.ModuleList([
-                ResBlock(channels_out[-1], channels_out[-1], time_channel, resnet_block_groups),
-                nn.GroupNorm(1, channels_out[-1]),
-                MultiHeadsAttention(channels_out[-1]),
-                ResBlock(channels_out[-1], channels_out[-1], time_channel, resnet_block_groups),
-            ])
-        )
+            kl_loss = model.get_kl_loss(mu, logvar)
+            recon_loss = model.get_recon_loss(x, recon_x)
+            loss = recon_loss + kl_loss 
+            train_loss += loss.item()
+            loss = loss / batch
 
-        self.ups = nn.ModuleList([])
-        for ind in reversed(range(len(channels_out))):
-            is_last = ind==0
-            self.ups.append(
-                nn.ModuleList([
-                    ResBlock(channels_out[ind]+channels_in[ind], channels_out[ind], time_channel, resnet_block_groups),
-                    ResBlock(channels_out[ind]+channels_in[ind], channels_out[ind], time_channel, resnet_block_groups),
-                    nn.GroupNorm(1,channels_out[ind]),
-                    MultiHeadsAttention(channels_out[ind]),
-                    Upsample(channels_out[ind], channels_in[ind]) if not is_last
-                        else nn.Conv2d(channels_out[ind], channels_in[ind], 3, padding=1)
-                ])
-            )
-            
-        
-        self.head = nn.ModuleList([])
-        self.head.append(
-            nn.ModuleList([
-                ResBlock(channels_in[0]+base_channel, base_channel, time_channel, resnet_block_groups),
-                nn.Conv2d(base_channel, base_channel, 1)
-            ])
-        )
-        
-        
-        self.classifier = nn.ModuleList([])
-        self.classifier.append(
-            nn.ModuleList([
-                nn.Flatten(),
-                nn.Linear(image_h*image_w*base_channel, 64),
-                nn.Linear(64, 10)
-            ])
-        )
-    
-    def forward(self, x, time=None, x_self_cond=None):
-        # x[b,3,h,w]
-        if self.self_condition:
-            if x_self_cond is None:
-                x_self_cond = torch.zeros_like(x)
-            x = torch.cat((x_self_cond,x), dim=1) #[b,2*3,h,w]
-            
-        x = self.stem(x) #[b,64,h,w]
-        r = x.clone()
-
-        t = self.time_mlp(time) if time is not None else None
-        
-        shortcut = []
-        for block1,block2,gn,attn,downsample in self.downs:
-            x = block1(x,t)
-            shortcut.append(x)
-
-            x = block2(x,t)
-            x = gn(x)
-            x = attn(x)
-            shortcut.append(x)
- 
-            x = downsample(x)
-            
-        for block1,gn,attn,block2 in self.mids:
-            x = block1(x, t)
-            x = gn(x)
-            x = attn(x)
-            x = block2(x, t)
-            
-        for block1,block2,gn,attn,upsample in self.ups:
-            x = torch.cat((x, shortcut.pop()), dim=1)
-            x = block1(x,t)
-            
-            x = torch.cat((x, shortcut.pop()), dim=1)
-            x = block2(x, t)
-            x = gn(x)
-            x = attn(x)
-            
-            x = upsample(x)
-            
-        x = torch.cat((x, r), dim=1)
-        for block, proj in self.head:
-            x = block(x, t)
-            x = proj(x)
-
-        return x
-            
-        
-    def classify_forward(self, x):
-        x = self.forward(x)
-        for flat, ln1, ln2 in self.classifier:
-            x = ln2(ln1(flat(x)))
-        return x
-        
-   
-   
-         
-
-if __name__ == "__main__":
-    import torchvision
-    from torchvision import transforms
-    transform = transforms.Compose([
-        transforms.Pad(4),
-        transforms.RandomHorizontalFlip(), 
-        transforms.RandomCrop(32), 
-        transforms.ToTensor(),
-    ])
-
-    train_dataset = torchvision.datasets.CIFAR10(root='./data/cifar',
-                                                train=True, 
-                                                transform=transform,
-                                                download=False)
-
-    # 测试数据集
-    test_dataset = torchvision.datasets.CIFAR10(root='./data/cifar',
-                                                train=False, 
-                                                transform=transform,
-                                                download=False)
-
-    train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                            batch_size=32, 
-                                            shuffle=True)
-    # 测试数据加载器
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                            batch_size=32, 
-                                            shuffle=False)
-
-    net = UnetCondition().cuda()  
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-
-    total_step = len(train_loader)
-    num_epochs = 30
-    for epoch in range(num_epochs):
-        for i, (images, labels) in enumerate(train_loader):
-            images = images.cuda()
-            labels = labels.cuda()
-            outputs = net.classify_forward(images)
-            loss = criterion(outputs, labels)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            if (i+1) % 100 == 0:
-                print ('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}' 
-                    .format(epoch+1, num_epochs, i+1, total_step, loss.item()))
 
+        print(f"Training loss {loss: .3f} \t Recon {recon_loss / batch: .3f} \t KL {kl_loss / batch: .3f} in Epoch {epoch}")
+
+        train_losses.append(train_loss / train_num)
+
+        valid_loss = 0.
+        valid_recon = 0.
+        valid_kl = 0.
+        valid_num = len(test_loader.dataset)
+        model.eval()
         with torch.no_grad():
-            correct = 0
-            total = 0
-            for images, labels in test_loader:
-                images = images.cuda()
-                labels = labels.cuda()
-                outputs = net.classify_forward(images)
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+            for idx, (x, _) in enumerate(test_loader):
+                x = x.to(device)
+                recon_x, mu, logvar = model(x)
+                
+                kl_loss = model.get_kl_loss(mu, logvar)
+                recon_loss = model.get_recon_loss(x, recon_x)
+                loss = recon_loss + kl_loss 
+                valid_loss += loss.item()
 
-            print('Test Accuracy of the model on the test images: {} %'.format(100 * correct / total))
+            valid_losses.append(valid_loss / valid_num)
+            print(f"Valid loss {valid_loss / valid_num: .3f} \t Recon {recon_loss / valid_num: .3f} \t KL {kl_loss / valid_num: .3f} in epoch {epoch}")
+
+                
+    plt.plot(train_losses, label='Train')
+    plt.plot(valid_losses, label='Valid')
+    plt.legend()
+    plt.title('Learning Curve');
+    plt.show()
+
+
+    # plot generated images from latent z
+    n = 20
+    digit_size = 28
+
+    grid_x = norm.ppf(np.linspace(0.05, 0.95, n))
+    grid_y = norm.ppf(np.linspace(0.05, 0.95, n))
+
+
+    model.to(torch.device('cpu'))
+    model.eval()
+    figure = np.zeros((digit_size * n, digit_size * n))
+    for i, yi in enumerate(grid_y):
+        for j, xi in enumerate(grid_x):
+            t = [xi, yi]
+            z_sampled = torch.FloatTensor(t)
+            with torch.no_grad():
+                decode = model.decoder(z_sampled)
+                digit = decode.view((digit_size, digit_size))
+                figure[
+                    i * digit_size: (i + 1) * digit_size,
+                    j * digit_size: (j + 1) * digit_size
+                ] = digit
+
+    plt.figure(figsize=(10, 10))
+    plt.imshow(figure, cmap="Greys_r")
+    plt.xticks([])
+    plt.yticks([])
+    plt.axis('off');
+    plt.show()
