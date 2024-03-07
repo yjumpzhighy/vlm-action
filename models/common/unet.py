@@ -2,10 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.normalization import GroupNorm
-
-
 import math
-from einops import reduce, rearrange
+
 
 
 
@@ -149,35 +147,7 @@ class Upsample(nn.Module):
         )
     def forward(self,x):
         return self.upsample(x)
-        
-        
-        
-        
-        
-
-    
-# class LinearAttention(nn.Module):
-#     def __init__(self,channel_in,heads=4,channel_head=32):
-#         super().__init__()
-#         self.scale = channel_head ** -0.5
-#         self.heads = heads
-#         self.channel_head = channel_head
-#         hidden_dim = heads * channel_head
-#         self.qkv = nn.Conv2d(channel_in, hidden_dim * 3, 1, bias=False)
-#         self.ffn = nn.Sequential(nn.Conv2d(hidden_dim, channel_in, 1),
-#                                  nn.GroupNorm(1, channel_in))
-        
-#     def forward(self, x):
-#         b,c,h,w = x.shape
-#         #[b,heads,h*w,channel_head]
-#         q,k,v = self.qkv(x).reshape(b,3,self.heads,self.channel_head,h*w).permute(0,1,2,4,3).chunk(3,dim=1)
-        
-#         q = q.softmax(dim=-2)
-#         k = k.softmax(dim=-1)
-        
-#         q = q * self.scale
-        
-   
+           
 class UnetCondition(nn.Module):
     def __init__(self, image_h=32, image_w=32, image_c=3, base_channel=64, channel_mults=(1,2,4,8), 
                  self_condition=False, resnet_block_groups=8):
