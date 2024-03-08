@@ -150,7 +150,7 @@ class Upsample(nn.Module):
            
 class UnetCondition(nn.Module):
     def __init__(self, image_h=32, image_w=32, image_c=3, base_channel=64, channel_mults=(1,2,4,8), 
-                 self_condition=False, resnet_block_groups=8):
+                 output_channel = 64, self_condition=False, resnet_block_groups=8):
         super().__init__()
         
         self.self_condition = self_condition
@@ -209,12 +209,11 @@ class UnetCondition(nn.Module):
                 ])
             )
             
-        
         self.head = nn.ModuleList([])
         self.head.append(
             nn.ModuleList([
                 ResBlock(channels_in[0]+base_channel, base_channel, time_channel, resnet_block_groups),
-                nn.Conv2d(base_channel, base_channel, 1)
+                nn.Conv2d(base_channel, output_channel, 1)
             ])
         )
         
@@ -223,8 +222,8 @@ class UnetCondition(nn.Module):
         self.classifier.append(
             nn.ModuleList([
                 nn.Flatten(),
-                nn.Linear(image_h*image_w*base_channel, 64),
-                nn.Linear(64, 10)
+                nn.Linear(image_h*image_w*output_channel, output_channel),
+                nn.Linear(output_channel, output_channel)
             ])
         )
     
@@ -305,7 +304,6 @@ if __name__ == "__main__":
                                                 transform=transform,
                                                 download=False)
 
-    # 测试数据集
     test_dataset = torchvision.datasets.CIFAR10(root='./data/cifar',
                                                 train=False, 
                                                 transform=transform,
@@ -314,12 +312,11 @@ if __name__ == "__main__":
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                             batch_size=32, 
                                             shuffle=True)
-    # 测试数据加载器
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
                                             batch_size=32, 
                                             shuffle=False)
 
-    net = UnetCondition().cuda()  
+    net = UnetCondition(32,32,3,base_channel=64, output_channel=10, self_condition=False).cuda()  
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 
