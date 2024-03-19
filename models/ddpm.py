@@ -3,20 +3,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torchvision
 from torchvision import transforms
-
+import os
 from common.gaussian_diffusion import GaussianDiffusion
-from models.common.conditional_unet import ConditionalUNet
+from common.conditional_unet import ConditionalUNet
+from common.utils import inception_score, frechet_inception_distance
 
 if __name__ == "__main__":
+    
     TIMESTEPS = 1000
-    BATCHSIZE = 32
+    BATCHSIZE = 128
     IMAGE_SIZE = 32
     IMAGE_C = 3
+    NUM_EPOCHS = 0
+    SAVE_MODEL_PATH = 'data/ddpm/best.pth'
 
     transform = transforms.Compose([
         # transforms.Pad(4),
         # transforms.RandomHorizontalFlip(),
-        transforms.RandomCrop(BATCHSIZE),
+        #transforms.RandomCrop(IMAGE_SIZE),
         transforms.ToTensor(),
     ])
 
@@ -34,39 +38,66 @@ if __name__ == "__main__":
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                                batch_size=BATCHSIZE,
                                                shuffle=True)
-    # 测试数据加载器
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
                                               batch_size=BATCHSIZE,
                                               shuffle=False)
 
-    model = ConditionalUNet(IMAGE_SIZE,
-                            IMAGE_SIZE,
-                            IMAGE_C,
-                            base_channel=64,
-                            output_channel=3)
-    diffuser = GaussianDiffusion(model, IMAGE_SIZE, IMAGE_C, TIMESTEPS).cuda()
+    diffuser = GaussianDiffusion(ConditionalUNet(IMAGE_SIZE,
+                                                IMAGE_SIZE,
+                                                IMAGE_C,
+                                                base_channel=64,
+                                                output_channel=3),
+                                 IMAGE_SIZE, IMAGE_C, TIMESTEPS, 'pred_noise').cuda()
     optimizer = torch.optim.Adam(diffuser.parameters(), lr=0.001)
 
     total_step = len(train_loader)
-    num_epochs = 1
-    for epoch in range(num_epochs):
+    cur_loss = np.finfo(np.float32).max
+    for epoch in range(NUM_EPOCHS):
         for i, (images, labels) in enumerate(train_loader):
             images = images.cuda()
+
+            mask = (labels == 5)
+            images = images[mask]
+            if images.shape[0]==0:
+                continue
+
 
             loss = diffuser(images)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            if (i + 1) % 500 == 0:
-                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(
-                    epoch + 1, num_epochs, i + 1, total_step, loss.item()))
+
+        print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(
+                    epoch + 1, NUM_EPOCHS, i + 1, total_step, loss.item()))
+
+        # save best model
+        if loss.item() < cur_loss:
+            cur_loss = loss.item()
+            torch.save(diffuser.state_dict(), SAVE_MODEL_PATH)
 
     with torch.no_grad():
-        sample_batch = 1
-        samples = diffuser.sample(sample_batch)
+        test_model = GaussianDiffusion(ConditionalUNet(IMAGE_SIZE,
+                                                       IMAGE_SIZE,
+                                                       IMAGE_C,
+                                                       base_channel=64,
+                                                       output_channel=3),
+                                       IMAGE_SIZE, IMAGE_C, TIMESTEPS, 'pred_noise', torch.device('cuda')).cuda()
+        test_model.load_state_dict(torch.load(SAVE_MODEL_PATH))
 
-        samples = samples.permute(0, 2, 3, 1).detach().cpu().numpy()
-        # Display images
-        plt.imshow(samples[0])
-        plt.axis('off')
-        plt.show()
+        sample_batch = 9
+        samples = test_model.sample(sample_batch)
+        samples = samples.permute(0, 2, 3, 1).contiguous().detach().cpu() #[b,h,w,c]
+        
+        # display images
+        for k in range(sample_batch):
+            img = samples[k].numpy()
+            plt.imshow(img)
+            plt.show()
+        
+        # metrics
+        samples = samples.view(-1, 3)
+        print(inception_score(samples))
+        print(frechet_inception_distance(samples, samples))
+        
+        
+        
