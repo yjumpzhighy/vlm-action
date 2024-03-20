@@ -81,23 +81,23 @@ if __name__ == "__main__":
                                                        IMAGE_C,
                                                        base_channel=64,
                                                        output_channel=3),
-                                       IMAGE_SIZE, IMAGE_C, TIMESTEPS, 'pred_noise', torch.device('cuda')).cuda()
+                                       IMAGE_SIZE, IMAGE_C, TIMESTEPS, 100, 0., 
+                                       'pred_noise', torch.device('cuda')).cuda()
         test_model.load_state_dict(torch.load(SAVE_MODEL_PATH))
 
-        sample_batch = 9
+        sample_batch = 3
+        # ddpm sampling
         samples = test_model.sample(sample_batch)
         samples = samples.permute(0, 2, 3, 1).contiguous().detach().cpu() #[b,h,w,c]
-        
         # display images
         for k in range(sample_batch):
             img = samples[k].numpy()
             plt.imshow(img)
             plt.show()
-        
-        # metrics
-        samples = samples.view(-1, 3)
-        print(inception_score(samples))
-        print(frechet_inception_distance(samples, samples))
-        
+ 
+        # # metrics
+        # samples = samples.view(-1, 3)
+        # print(inception_score(samples))
+        # print(frechet_inception_distance(samples, samples))
         
         
