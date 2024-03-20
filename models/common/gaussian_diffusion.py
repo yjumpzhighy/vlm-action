@@ -25,6 +25,8 @@ class GaussianDiffusion(nn.Module):
                  image_size,
                  image_channel,
                  timesteps,
+                 ddim_sampling_steps=None,
+                 ddim_sampling_eta=1.,
                  objective="pred_noise",
                  device=None):
         super().__init__()
@@ -32,6 +34,8 @@ class GaussianDiffusion(nn.Module):
         self.image_size = image_size
         self.image_channel = image_channel
         self.timesteps = timesteps
+        self.ddim_sampling_steps = ddim_sampling_steps
+        self.ddim_sampling_eta = ddim_sampling_eta
         self.self_condition = model.self_condition if hasattr(
             model, "self_condition") else None
         self.objective = objective
@@ -91,7 +95,6 @@ class GaussianDiffusion(nn.Module):
         loss_weight = signal_noise_ratio / (signal_noise_ratio + 1)
         self.register_buffer('loss_weight', loss_weight.to(torch.float32))
 
-    # TODO: move to data preprocess
     def normalize_img(self, img):
         # img is normalized form 0-255 to 0-1
         # normalize to [-1,1]
@@ -99,7 +102,8 @@ class GaussianDiffusion(nn.Module):
 
     def unnormalize_img(self, img):
         # unnormalize to [0,1]
-        return (img + 1) * 0.5
+        #return (img + 1) * 0.5
+        return img * 0.5 + 0.5
 
     @autocast(enabled=False)
     def q_sample(self, x0, t, noise):
@@ -108,7 +112,7 @@ class GaussianDiffusion(nn.Module):
                extract(self.sqrt_one_minus_alphas_cumprod, t, x0.shape) * noise
         return out
 
-    def model_prediction(self, xt, t, x_self_cond=None, clip_x0=False):
+    def model_prediction(self, xt, t, x_self_cond=None, clip_x0=False, rederive_pred_noise=False):
         model_out = self.model(xt, t, x_self_cond)
         #maybe_clip = torch.clamp(-1,1) if clip_x0 else t
 
@@ -120,6 +124,12 @@ class GaussianDiffusion(nn.Module):
 
             if clip_x0:
                 torch.clamp_(pred_x0, -1, 1)
+                
+            # recalculate noise rather than direct model output
+            # if clip_x0 and rederive_pred_noise:
+            #     pred_noise = (extract(self.sqrt_reciprocal_alphas_cumprod,t,xt.shape) * xt - pred_x0) / \
+            #        extract(self.sqrt_reciprocal_minus_one_alphas_cumprod,t,xt.shape)
+                
         elif self.objective == 'pred_x0':
             pred_x0 = model_out
             if clip_x0:
@@ -222,79 +232,43 @@ class GaussianDiffusion(nn.Module):
         return model_mean, posterior_logvar, x0
 
     def q_posterior(self, x0, xt, t):
-        posterior_mean = extract(self.posterior_mean_coef1, t, xt.shape)*x0 + \
+        posterior_mean = extract(self.posterior_mean_coef1, t, xt.shape) * x0 + \
                           extract(self.posterior_mean_coef2, t, xt.shape) * xt
 
         posterior_logvar = extract(self.posterior_log_var_clipped, t, xt.shape)
         return posterior_mean, posterior_logvar
 
+    def sample_ddim(self, batch_size=1):
+        times = torch.linspace(-1,self.timesteps-1,steps=self.ddim_sampling_steps+1) 
+        times = list(reversed(times.int().tolist()))
+        time_pairs = list(zip(times[:-1],times[1:])) #[[cur,next]]
+        
+        img = torch.randn(
+            (batch_size, self.image_channel, self.image_size, self.image_size),
+            device=self.device)
+        
+        pred_x0 = None
+        for time,time_next in tqdm(time_pairs):
+            times_cond = torch.full((batch_size, ), time, 
+                                        device=self.device, dtype=torch.long)
+            self_cond = pred_x0 if self.self_condition else None
+            pred_noise, pred_x0 = self.model_prediction(img, times_cond, self_cond, True)
 
-# GaussianDiffusion unit test
-if __name__ == "__main__":
-    TIMESTEPS = 1000
-    BATCHSIZE = 32
-    IMAGE_SIZE = 32
-    IMAGE_C = 3
+            if time_next < 0:
+                img = pred_x0
+                continue
+            
+            accu_alpha = self.alphas_cumprod[time]
+            accu_alpha_next = self.alphas_cumprod[time_next]
+            
+            sigma = self.ddim_sampling_eta * ((1-accu_alpha/accu_alpha_next) * \
+                        (1-accu_alpha_next) / (1-accu_alpha)).sqrt()
+            c = (1-accu_alpha_next-sigma**2).sqrt()
+            
+            noise = torch.randn_like(img)
+            img = pred_x0 * accu_alpha_next.sqrt() + c * pred_noise + sigma * noise
+            
+        img = self.unnormalize_img(img)
+        return img    
+                
 
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from models.common.conditional_unet import ConditionalUNet
-    import torchvision
-    from torchvision import transforms
-    transform = transforms.Compose([
-        # transforms.Pad(4),
-        # transforms.RandomHorizontalFlip(),
-        transforms.RandomCrop(BATCHSIZE),
-        transforms.ToTensor(),
-    ])
-
-    train_dataset = torchvision.datasets.CIFAR10(root='./data/cifar',
-                                                 train=True,
-                                                 transform=transform,
-                                                 download=False)
-
-    # 测试数据集
-    test_dataset = torchvision.datasets.CIFAR10(root='./data/cifar',
-                                                train=False,
-                                                transform=transform,
-                                                download=False)
-
-    train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                               batch_size=BATCHSIZE,
-                                               shuffle=True)
-    # 测试数据加载器
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                              batch_size=BATCHSIZE,
-                                              shuffle=False)
-
-    model = ConditionalUNet(IMAGE_SIZE,
-                            IMAGE_SIZE,
-                            IMAGE_C,
-                            base_channel=64,
-                            output_channel=3)
-    diffuser = GaussianDiffusion(model, IMAGE_SIZE, IMAGE_C, TIMESTEPS).cuda()
-    optimizer = torch.optim.Adam(diffuser.parameters(), lr=0.001)
-
-    total_step = len(train_loader)
-    num_epochs = 1
-    for epoch in range(num_epochs):
-        for i, (images, labels) in enumerate(train_loader):
-            images = images.cuda()
-
-            loss = diffuser(images)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            if (i + 1) % 500 == 0:
-                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(
-                    epoch + 1, num_epochs, i + 1, total_step, loss.item()))
-
-    with torch.no_grad():
-        sample_batch = 1
-        samples = diffuser.sample(sample_batch)
-
-        samples = samples.permute(0, 2, 3, 1).detach().cpu().numpy()
-        # Display images
-        plt.imshow(samples[0])
-        plt.axis('off')
-        plt.show()
