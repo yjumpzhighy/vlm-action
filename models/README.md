@@ -123,8 +123,7 @@ e(t): noise N(0,I)
 	```python
 	python models/ddpm.py
 	python models/ddim.py
-	# default uses cifar10 as training data.
-	# as the input images blurry, the generated images would be blurry as well.
+	# see generated image example: (trained on cifar10)
  	```
 <img src="../assets/ddpm_dog.png" width="300" /> 
 
