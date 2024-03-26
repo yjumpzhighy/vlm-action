@@ -6,7 +6,7 @@ import math
 from einops import rearrange, reduce, repeat
 from functools import partial
 
-from utils import RMSNorm
+from .utils import RMSNorm
 
 class PositionalEmbedding(nn.Module):
     def __init__(self, dmodel, scale=1.0):
@@ -251,7 +251,7 @@ class ConditionalUNet(nn.Module):
                              resnet_block_groups),
                     ResBlock(channels_in[ind], channels_in[ind], time_channel,
                              resnet_block_groups),
-                    MultiHeadsAttention(channels_in[ind]),
+                    MultiHeadsLinearAttention(channels_in[ind]),
                     Downsample(channels_in[ind], channels_out[ind])
                     if not is_last else nn.Conv2d(
                         channels_in[ind], channels_out[ind], 3, padding=1)
@@ -269,7 +269,7 @@ class ConditionalUNet(nn.Module):
             nn.ModuleList([
                 ResBlock(channels_out[-1], channels_out[-1], time_channel,
                          resnet_block_groups),
-                MultiHeadsAttention(channels_out[-1]),
+                MultiHeadsLinearAttention(channels_out[-1]),
                 ResBlock(channels_out[-1], channels_out[-1], time_channel,
                          resnet_block_groups),
             ]))
@@ -285,7 +285,7 @@ class ConditionalUNet(nn.Module):
                     ResBlock(channels_out[ind] + channels_in[ind] if short_cuts else channels_out[ind],
                              channels_out[ind], time_channel,
                              resnet_block_groups),
-                    MultiHeadsAttention(channels_out[ind]),
+                    MultiHeadsLinearAttention(channels_out[ind]),
                     Upsample(channels_out[ind], channels_in[ind])
                     if not is_last else nn.Conv2d(
                         channels_out[ind], channels_in[ind], 3, padding=1)
