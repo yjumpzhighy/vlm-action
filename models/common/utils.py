@@ -69,6 +69,15 @@ def frechet_inception_distance(feat_f, feat_t):
 
     fid = torch.sum((mean_f - mean_t)**2) + torch.trace(var_f + var_t - 2 * torch.sqrt(torch.mul(var_f, var_t)))
     return fid
+ 
+class RMSNorm(nn.Module):
+    def __init__(self,dim):
+        super().__init__()
+        self.g = nn.Parameter(torch.ones(1,dim,1,1))
+    def forward(self,x):
+        return F.normalize(x,dim=1) * self.g * (x.shape[1] ** 0.5)
+         
+
     
 class EMA(object):
     # v(t) = decay*v(t-1) + (1-decay)*theta(t)
