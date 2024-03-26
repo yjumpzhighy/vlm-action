@@ -3,7 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.normalization import GroupNorm
 import math
+from einops import rearrange, reduce, repeat
+from functools import partial
 
+from utils import RMSNorm
 
 class PositionalEmbedding(nn.Module):
     def __init__(self, dmodel, scale=1.0):
@@ -45,8 +48,10 @@ class Block(nn.Module):
         super().__init__()
         self.channel_in = channel_in
         self.channel_out = channel_out
-        self.conv = NormalizedConv2d(channel_in, channel_out, 3, padding=1)
+        #self.conv = NormalizedConv2d(channel_in, channel_out, 3, padding=1)
+        self.conv = nn.Conv2d(channel_in, channel_out, 3, padding=1)
         self.norm = nn.GroupNorm(groups, channel_out)  #?how about batch norm?
+        #self.norm = nn.BatchNorm2d(channel_out)
         self.act = nn.SiLU()  #?how about relu
 
     def forward(self, x, scale_shift=None):
@@ -70,8 +75,10 @@ class ResBlock(nn.Module):
         self.block1 = Block(channel_in, channel_out, groups=groups)
         self.block2 = Block(channel_out, channel_out, groups=groups)
 
-        self.res_conv = nn.Conv2d(channel_in, channel_out, 1) if channel_in != channel_out\
-                        else nn.Identity()
+        self.shortcut = nn.Sequential(
+            nn.Conv2d(channel_in, channel_out, 1),
+            nn.BatchNorm2d(channel_out)
+        ) if channel_in != channel_out else nn.Identity()
 
     def forward(self, x, time_embedding=None):
         scale_shift = None
@@ -80,46 +87,89 @@ class ResBlock(nn.Module):
             time_embedding = time_embedding[:, :, None, None]
             scale_shift = time_embedding.chunk(2, dim=1)
 
-        h = self.block2(self.block1(x, scale_shift))
-        return h + self.res_conv(x)
+        h = self.block1(x, scale_shift)
+        h = self.block2(h)
+        return h + self.shortcut(x)
 
 
 class MultiHeadsAttention(nn.Module):
-    def __init__(self, channel_in, heads=4, channel_head=32):
+    def __init__(self, channel_in, heads=4, channel_head=32, num_mem_kv=4, dropout=0.):
         super().__init__()
         self.scale = channel_head**-0.5
         self.heads = heads
         self.channel_head = channel_head
         hidden_dim = heads * channel_head
+        
         self.qkv = nn.Conv2d(channel_in, hidden_dim * 3, 1,
                              bias=False)  #linear?
-        self.ffn = nn.Conv2d(hidden_dim, channel_in, 1)  #linear?
+        # self.ffn = nn.Conv2d(hidden_dim, channel_in, 1)  #linear?
+        self.ffn = nn.Sequential(nn.Conv2d(hidden_dim, channel_in, 1),
+                                 RMSNorm(channel_in))
         self.softmax = nn.Softmax(dim=-1)
+        self.attn_drop = nn.Dropout(dropout)
+        
+        self.norm = RMSNorm(channel_in)
+        self.mem_kv = nn.Parameter(torch.randn(2,heads,num_mem_kv,channel_head))
 
     def forward(self, x):
         b, c, h, w = x.shape
-        # q,k,v = self.qkv(x).chunk(3, dim=1) #[b,heads*channel_head,h,w]
-        # q = q.view(b, self.heads, self.channel_head, h*w)  #[b,heads,channel_head,h*w]
-        # k = k.view(k, self.heads, self.channel_head, h*w)  #[b,heads,channel_head,h*w]
-        # v = v.view(v, self.heads, self.channel_head, h*w)  #[b,heads,channel_head,h*w]
 
-        # qkv = self.qkv(x).reshape(b,N,3,self.num_heads,C//self.num_heads).permute(2,0,3,1,4)
-        # q,k,v = qkv[0],qkv[1],qkv[2] #[B,num_heads,Wh*Ww,C//num_heads]
-
+        x = self.norm(x)
+        qkv = self.qkv(x).chunk(3, dim=1)
         #[b,heads,h*w,channel_head]
-        q, k, v = self.qkv(x).reshape(b, 3, self.heads, self.channel_head,
-                                      h * w).permute(0, 1, 2, 4,
-                                                     3).chunk(3, dim=1)
+        q,k,v = map(lambda t: rearrange(t, 'b (h c) x y -> b h (x y) c', h=self.heads),qkv)
+        
+        # #[b,heads,num_mem_kv,channel_head]
+        # mk,mv = map(lambda t: repeat(t, 'h n c -> b h n c', b=b), self.mem_kv)
+        # k,v = map(partial(torch.cat, dim=-2), ((mk,k),(mv,v)))
+        
         q = q * self.scale
         attn = (q @ k.transpose(-2, -1))  #[b,heads,h*w,h*w]
 
         attn = self.softmax(attn)
-        x = (attn @ v).transpose(-2,
-                                 -1).reshape(b, -1, h,
-                                             w)  #[b,heads*channel_head,h,w]
-        x = self.ffn(x)  #[b,c,h,w]
+        attn = self.attn_drop(attn)
+        out = attn @ v
+        out = rearrange(out, 'b h (x y) c -> b (h c) x y', x=h, y=w) #[b, heads*channel_head,h,w]
+        out = self.ffn(out)  #[b,c,h,w]
 
-        return x
+        return out
+
+
+class MultiHeadsLinearAttention(nn.Module):
+    def __init__(self, channel_in, heads=4, channel_head=32, num_mem_kv=4, dropout=0.):
+        super().__init__()
+        self.scale = channel_head**-0.5
+        self.heads = heads
+        self.channel_head = channel_head
+        hidden_dim = heads * channel_head
+        
+        self.qkv = nn.Conv2d(channel_in, hidden_dim * 3, 1,
+                             bias=False)  #linear?
+        self.ffn = nn.Sequential(nn.Conv2d(hidden_dim, channel_in, 1),
+                                 RMSNorm(channel_in))  
+        self.norm = RMSNorm(channel_in)
+        self.mem_kv = nn.Parameter(torch.randn(2,heads,num_mem_kv,channel_head))
+        
+    def forward(self, x):
+        b, c, h, w = x.shape
+
+        x = self.norm(x)
+        qkv = self.qkv(x).chunk(3, dim=1)
+        #[b,heads,h*w,channel_head]
+        q,k,v = map(lambda t: rearrange(t, 'b (h c) x y -> b h (x y) c', h=self.heads),qkv)
+
+        # #[b,heads,num_mem_kv,channel_head]
+        # mk,mv = map(lambda t: repeat(t, 'h n c -> b h n c', b=b), self.mem_kv)
+        # k,v = map(partial(torch.cat, dim=-2), ((mk,k),(mv,v)))
+        
+        q = q.softmax(dim=-1)
+        k = k.softmax(dim=-2)
+        q = q * self.scale
+        attn = k.transpose(-2, -1) @ v  #[b,heads,channel_head,channlel_head]
+        out = q @ attn #[b,heads,h*w,channlel_head]
+        out = rearrange(out, 'b h (x y) c -> b (h c) x y', x=h, y=w) #[b, heads*channel_head,h,w]
+        out = self.ffn(out)  #[b,c,h,w]
+        return out
 
 
 class Downsample(nn.Module):
@@ -133,6 +183,7 @@ class Downsample(nn.Module):
         self.downsample = nn.Conv2d(channels_in * 4, channels_out, 1)
 
     def forward(self, x):
+        
         # x:(b,c,h,w)
         b, c, h, w = x.shape
 
@@ -168,11 +219,13 @@ class ConditionalUNet(nn.Module):
                  channel_mults=(1, 2, 4, 8),
                  output_channel=64,
                  self_condition=False,
-                 resnet_block_groups=8):
+                 resnet_block_groups=8,
+                 short_cuts=True):
         super().__init__()
 
         self.self_condition = self_condition
         input_channel = image_c * (2 if self_condition else 1)
+        self.short_cuts = short_cuts
 
         self.stem = nn.Conv2d(input_channel, base_channel, 1, padding=0)
 
@@ -198,19 +251,24 @@ class ConditionalUNet(nn.Module):
                              resnet_block_groups),
                     ResBlock(channels_in[ind], channels_in[ind], time_channel,
                              resnet_block_groups),
-                    nn.GroupNorm(1, channels_in[ind]),
                     MultiHeadsAttention(channels_in[ind]),
                     Downsample(channels_in[ind], channels_out[ind])
                     if not is_last else nn.Conv2d(
                         channels_in[ind], channels_out[ind], 3, padding=1)
                 ]))
+            if not is_last:
+                image_h = image_h // 2
+                image_w = image_w // 2
+        self.encoded_image_h = image_h
+        self.encoded_image_w = image_w    
+        self.encoded_image_c = channels_out[-1]
+        
 
         self.mids = nn.ModuleList([])
         self.mids.append(
             nn.ModuleList([
                 ResBlock(channels_out[-1], channels_out[-1], time_channel,
                          resnet_block_groups),
-                nn.GroupNorm(1, channels_out[-1]),
                 MultiHeadsAttention(channels_out[-1]),
                 ResBlock(channels_out[-1], channels_out[-1], time_channel,
                          resnet_block_groups),
@@ -221,23 +279,26 @@ class ConditionalUNet(nn.Module):
             is_last = ind == 0
             self.ups.append(
                 nn.ModuleList([
-                    ResBlock(channels_out[ind] + channels_in[ind],
+                    ResBlock(channels_out[ind] + channels_in[ind] if short_cuts else channels_out[ind],
                              channels_out[ind], time_channel,
                              resnet_block_groups),
-                    ResBlock(channels_out[ind] + channels_in[ind],
+                    ResBlock(channels_out[ind] + channels_in[ind] if short_cuts else channels_out[ind],
                              channels_out[ind], time_channel,
                              resnet_block_groups),
-                    nn.GroupNorm(1, channels_out[ind]),
                     MultiHeadsAttention(channels_out[ind]),
                     Upsample(channels_out[ind], channels_in[ind])
                     if not is_last else nn.Conv2d(
                         channels_out[ind], channels_in[ind], 3, padding=1)
                 ]))
+            if not is_last:
+                image_h = image_h * 2
+                image_w = image_w * 2
 
         self.head = nn.ModuleList([])
         self.head.append(
             nn.ModuleList([
-                ResBlock(channels_in[0] + base_channel, base_channel,
+                ResBlock(channels_in[0] + base_channel if short_cuts else channels_in[0],
+                         base_channel,
                          time_channel, resnet_block_groups),
                 nn.Conv2d(base_channel, output_channel, 1)
             ]))
@@ -253,7 +314,7 @@ class ConditionalUNet(nn.Module):
     def forward(self, x, time=None, x_self_cond=None):
         # x[b,3,h,w]
         # time[b,]
-
+        assert self.short_cuts, f"unet encode-decode process requires shortcuts"
         if self.self_condition:
             if x_self_cond is None:
                 x_self_cond = torch.zeros_like(x)
@@ -265,31 +326,28 @@ class ConditionalUNet(nn.Module):
         t = self.time_mlp(time) if time is not None else None  #[b,256]
 
         shortcut = []
-        for block1, block2, gn, attn, downsample in self.downs:
+        for block1, block2, attn, downsample in self.downs:
             x = block1(x, t)
             shortcut.append(x)
 
             x = block2(x, t)
-            x = gn(x)
-            x = attn(x)
+            x = attn(x) + x
             shortcut.append(x)
 
             x = downsample(x)
 
-        for block1, gn, attn, block2 in self.mids:
+        for block1, attn, block2 in self.mids:
             x = block1(x, t)
-            x = gn(x)
-            x = attn(x)
+            x = attn(x) + x
             x = block2(x, t)
 
-        for block1, block2, gn, attn, upsample in self.ups:
+        for block1, block2, attn, upsample in self.ups:
             x = torch.cat((x, shortcut.pop()), dim=1)
             x = block1(x, t)
 
             x = torch.cat((x, shortcut.pop()), dim=1)
             x = block2(x, t)
-            x = gn(x)
-            x = attn(x)
+            x = attn(x) + x
 
             x = upsample(x)
 
@@ -300,6 +358,54 @@ class ConditionalUNet(nn.Module):
 
         return x
 
+    def encode(self,x,time=None,x_self_cond=None):
+        # x[b,3,h,w]
+        # time[b,]
+
+        if self.self_condition:
+            if x_self_cond is None:
+                x_self_cond = torch.zeros_like(x)
+            x = torch.cat((x_self_cond, x), dim=1)  #[b,2*3,h,w]
+
+        x = self.stem(x)  #[b,64,h,w]
+
+        t = self.time_mlp(time) if time is not None else None  #[b,256]
+
+        #shortcut = []
+        for block1, block2, attn, downsample in self.downs:
+            x = block1(x, t)
+            #shortcut.append(x)
+
+            x = block2(x, t)
+            #x = attn(x)
+            #shortcut.append(x)
+
+            x = downsample(x)
+
+
+        for block1, attn, block2 in self.mids:
+            x = block1(x, t)
+            #x = attn(x)
+            x = block2(x, t)
+            
+        return x #[b,h/8,w/8,512]
+  
+    def decode(self, x, time=None):
+        assert not self.short_cuts, f"unet short cuts not supported in decode-only process"
+        t = self.time_mlp(time) if time is not None else None  #[b,256]
+        for block1, block2, attn, upsample in self.ups:
+            x = block1(x, t)
+            x = block2(x, t)
+            #x = attn(x)
+
+            x = upsample(x)
+
+        for block, proj in self.head:
+            x = block(x, t)
+            x = proj(x)
+
+        return x
+            
     def classify_forward(self, x):
         x = self.forward(x)
         for flat, ln1, ln2 in self.classifier:
@@ -347,7 +453,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 
     total_step = len(train_loader)
-    num_epochs = 30
+    num_epochs = 60
     for epoch in range(num_epochs):
         for i, (images, labels) in enumerate(train_loader):
             images = images.cuda()
@@ -356,9 +462,8 @@ if __name__ == "__main__":
             loss = criterion(outputs, labels)
             optimizer.zero_grad()
             loss.backward()
-            optimizer.step()
-            if (i + 1) % 100 == 0:
-                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(
+            optimizer.step()  
+        print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(
                     epoch + 1, num_epochs, i + 1, total_step, loss.item()))
 
         with torch.no_grad():
