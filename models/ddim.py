@@ -9,7 +9,6 @@ from common.conditional_unet import ConditionalUNet
 from common.utils import inception_score, frechet_inception_distance
 
 if __name__ == "__main__":
-    
     TIMESTEPS = 1000
     BATCHSIZE = 128
     IMAGE_SIZE = 32
@@ -99,3 +98,8 @@ if __name__ == "__main__":
         # samples = samples.view(-1, 3)
         # print(inception_score(samples))
         # print(frechet_inception_distance(samples, samples))
+        
+    
+        
+        
+        
