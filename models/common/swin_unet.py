@@ -671,7 +671,7 @@ if __name__ == '__main__':
     import os
     from torch.nn.modules.loss import CrossEntropyLoss
     
-    from datasets import SynapseDataset, ImageNetDataset
+    from datasets import SynapseDataset
     from utils import DiceLoss
    
     BATCHSIZE = 32
