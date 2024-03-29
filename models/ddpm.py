@@ -17,16 +17,16 @@ if __name__ == "__main__":
     IMAGE_C = 3
     NUM_EPOCHS = 100
     SAVE_MODEL_PATH = 'data/ddpm/best.pth'
-    # data_train = CifarDataset('/home/zuyuanyang/Projects/vlm/data/cifar', IMAGE_SIZE, 
-    #                           transforms.Compose([transforms.ToTensor()]), 'train')
+    
+    data_train = CifarDataset(os.path.abspath(os.path.join(os.getcwd(), '../../Data/cifar10')), 
+                              IMAGE_SIZE, transforms.Compose([transforms.ToTensor()]), 'train')
  
-    from transformers import DistilBertTokenizer
-    tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
-    data_train = FlickrDataset("/home/zuyuanyang/Data/flickr30k/captions_fixed.csv",
-                     "/home/zuyuanyang/Data/flickr30k/flickr30k_images/",
-                     tokenizer,
-                     256,
-                     IMAGE_SIZE)
+    # from transformers import DistilBertTokenizer
+    # tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+    # data_train = FlickrDataset(
+    #     os.path.abspath(os.path.join(os.getcwd(), '../../Data/flickr30k/captions_fixed.csv')),
+    #     os.path.abspath(os.path.join(os.getcwd(), '../../Data/flickr30k/flickr30k_images/')),
+    #     tokenizer, 256, IMAGE_SIZE)
     train_loader = torch.utils.data.DataLoader(
         data_train,
         batch_size=BATCHSIZE,
