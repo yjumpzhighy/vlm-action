@@ -6,7 +6,9 @@ from scipy import ndimage
 import torchvision.datasets as datasets
 import pandas as pd
 import cv2
-from torchvision.datasets import MNIST, CIFAR10
+import datasets
+
+from torchvision.datasets import MNIST, CIFAR10, ImageFolder
 
 def image_zoom(x, raw_h, tgt_h, raw_w, tgt_w, order=0):
     if tgt_h != raw_h or tgt_w != raw_w:
@@ -47,14 +49,40 @@ class SynapseDataset(torch.utils.data.Dataset):
         return sample
     
 class ImageNetDataset(torch.utils.data.Dataset):
-    def __init__(self, data_dir, transform=None):
-        self.train_dataset = datasets.ImageFolder(root=data_dir, transform=transform)
+    def __init__(self, rootdir, image_size=224, transform=None, mode='train'):
+        self.image_size = image_size
+        self.dataset = datasets.load_from_disk(rootdir)[mode]
+        self.transform = transform
         
     def __len__(self):
-        return self.train_dataset.__len__()
+        return len(self.dataset)
 
     def __getitem__(self, idx):
-        return self.train_dataset[idx]
+        data = self.dataset[idx]
+        
+        image = data['image']
+        label = data['label']
+        
+        image_w, image_h = image.size
+        image_mode = image.mode
+    
+        dd= image.mode
+      
+        if self.image_size != image_w or self.image_size != image_h:
+            image = image.resize((self.image_size, self.image_size)) 
+        
+        if self.transform is not None:
+            image = self.transform(image)
+            
+        if len(image_mode)==1: # L/RGB
+            image = image.repeat(3,1,1)
+        
+        # print(dd, image.shape)
+        item = {}
+        item['image'] = image.float()
+        item['label'] = label
+        return item
+
     
 class FlickrDataset(torch.utils.data.Dataset):
     def __init__(self, captions_path, images_path, tokenizer=None, token_max_len=256, 
