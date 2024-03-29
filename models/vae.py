@@ -21,7 +21,9 @@ if __name__ == "__main__":
     IMAGE_C = 1
     EMBEDDING_DIM = 8
     LATENT_DIM = 2
-    data_train = MnistDataset('/home/zuyuanyang/Projects/vlm/data', IMAGE_SIZE, 
+    
+    data_train = MnistDataset(os.path.abspath(os.path.join(os.getcwd(), '../../Data')),
+                              IMAGE_SIZE, 
                               transforms.Compose([transforms.ToTensor()]), 'train')    
     train_loader = torch.utils.data.DataLoader(
         data_train,
