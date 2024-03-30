@@ -65,8 +65,6 @@ class ImageNetDataset(torch.utils.data.Dataset):
         
         image_w, image_h = image.size
         image_mode = image.mode
-    
-        dd= image.mode
       
         if self.image_size != image_w or self.image_size != image_h:
             image = image.resize((self.image_size, self.image_size)) 
@@ -74,10 +72,12 @@ class ImageNetDataset(torch.utils.data.Dataset):
         if self.transform is not None:
             image = self.transform(image)
             
-        if len(image_mode)==1: # L/RGB
+        a = image.shape        
+        if len(image_mode)==1: #L
             image = image.repeat(3,1,1)
-        
-        # print(dd, image.shape)
+        elif len(image_mode)==4: #RGBA
+            image = image[:3,:,:]
+            
         item = {}
         item['image'] = image.float()
         item['label'] = label
