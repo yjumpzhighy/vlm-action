@@ -12,29 +12,38 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 
 from common.variational_auto_encoder import VariationalAutoEncoder
-from common.datasets import FlickrDataset, MnistDataset
+from common.datasets import FlickrDataset, MnistDataset, CifarDataset
 
 if __name__ == "__main__":
-    EPOCHS = 10
-    BATCH_SIZE = 128
+    EPOCHS = 100
+    BATCH_SIZE = 512
     IMAGE_SIZE = 32
-    IMAGE_C = 1
-    EMBEDDING_DIM = 8
-    LATENT_DIM = 2
-    
-    data_train = MnistDataset(os.path.abspath(os.path.join(os.getcwd(), '../../Data')),
-                              IMAGE_SIZE, 
-                              transforms.Compose([transforms.ToTensor()]), 'train')    
-    train_loader = torch.utils.data.DataLoader(
-        data_train,
-        batch_size=BATCH_SIZE,
-        num_workers=4,
-        shuffle=True)
+    IMAGE_C = 3
+    EMBEDDING_DIM = 64
+    LATENT_DIM = 4
+
+    from transformers import CLIPTokenizer
+    tokenizer = CLIPTokenizer.from_pretrained('openai/clip-vit-base-patch32')
+    data_train = CifarDataset(
+        os.path.abspath(os.path.join(os.getcwd(), '../../Data/cifar10')),
+        IMAGE_SIZE,
+        transforms.Compose([
+            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+            transforms.ToTensor()
+        ]), 'train', tokenizer)
+
+    train_loader = torch.utils.data.DataLoader(data_train,
+                                               batch_size=BATCH_SIZE,
+                                               num_workers=4,
+                                               shuffle=True)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = VariationalAutoEncoder(IMAGE_SIZE,IMAGE_C,EMBEDDING_DIM,IMAGE_C,LATENT_DIM)
-    model.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    model = VariationalAutoEncoder(IMAGE_SIZE,
+                                   IMAGE_C,
+                                   EMBEDDING_DIM,
+                                   output_chann=IMAGE_C,
+                                   latent_chann=LATENT_DIM).to(device)
+    optimizer = model.configure_optimziers(lr=1e-4)[0]
 
     for epoch in range(EPOCHS):
         model.train()
@@ -42,43 +51,47 @@ if __name__ == "__main__":
         for idx, batch in enumerate(train_loader):
             x = batch['image'].to(device)
 
-            recon_x, mu, logvar = model(x)
-            kl_loss = model.get_kl_loss(mu, logvar)
-            recon_loss = model.get_recon_loss(x, recon_x)
-            loss = kl_loss + recon_loss
-            
+            *_, loss, log = model(x)
+
             optimizer.zero_grad()
             loss.backward()
-            optimizer.step()  
-        print(f"Training loss {loss: .3f} \t Recon {recon_loss : .3f} \t KL {kl_loss : .3f} in Epoch {epoch}")
-
+            optimizer.step()
+        print(f"Training loss {loss: .3f} in Epoch {epoch}")
     torch.save(model.state_dict(), 'data/vae/best.pth')
 
-    # plot generated images from latent z
-    n = 10
-    grid_x = norm.ppf(np.linspace(0.05, 0.95, n))
-    grid_y = norm.ppf(np.linspace(0.05, 0.95, n))
+    n = 3
+    linspace = 10
+    grids = [
+        norm.ppf(np.linspace(0.05, 0.95, linspace))
+        for i in range(model.encoded_image_h * model.encoded_image_w *
+                       LATENT_DIM)
+    ]
 
-    test_model = VariationalAutoEncoder(IMAGE_SIZE,IMAGE_C,EMBEDDING_DIM,IMAGE_C,LATENT_DIM)
-    test_model.load_state_dict(torch.load('data/vae/best.pth'))
-    test_model = test_model.to(torch.device('cpu'))
-    test_model.eval()
     figure = np.zeros((IMAGE_SIZE * n, IMAGE_SIZE * n, IMAGE_C))
-    for i, yi in enumerate(grid_y):
-        for j, xi in enumerate(grid_x):
-            t = [[xi, yi]]
-            z_sampled = torch.FloatTensor(t)
-            with torch.no_grad():
-                decode = test_model.decode_latent(z_sampled)
-                digit = decode.view(IMAGE_SIZE, IMAGE_SIZE, IMAGE_C)
-                figure[
-                    i * IMAGE_SIZE: (i + 1) * IMAGE_SIZE,
-                    j * IMAGE_SIZE: (j + 1) * IMAGE_SIZE,
-                    :
-                ] = digit
-    plt.figure(figsize=(10,10))
-    plt.imshow(figure, cmap="Greys_r")
-    plt.xticks([])
-    plt.yticks([])
-    plt.axis('off');
-    plt.show()
+    with torch.no_grad():
+        for i in range(n * n):
+            z_sampled = np.array([
+                np.random.choice(grids[i])
+                for i in range(model.encoded_image_h * model.encoded_image_w *
+                               LATENT_DIM)
+            ]).reshape(1, LATENT_DIM, model.encoded_image_h,
+                       model.encoded_image_w)
+            z_sampled = torch.FloatTensor(z_sampled).cuda()
+            decode = model(z_sampled, mode='decode')[0]
+            digit = decode[0].permute(1, 2,
+                                      0).contiguous().detach().cpu().numpy()
+
+            fig_row_idx = int(i / n)
+            fig_col_idx = int(i % n)
+            figure[fig_row_idx * IMAGE_SIZE:(fig_row_idx + 1) * IMAGE_SIZE,
+                   fig_col_idx * IMAGE_SIZE:(fig_col_idx + 1) *
+                   IMAGE_SIZE, :] = digit
+
+    figure = (figure * 255).astype('uint8')
+    if IMAGE_C == 1:
+        figure = np.squeeze(figure, axis=-1)
+        plt.imsave('vae_image.png', figure, cmap='gray', format='png')
+    elif IMAGE_C == 3:
+        plt.imsave('vae_image.png', figure, format='png')
+    else:
+        raise ValueError("image channels not supported.")
