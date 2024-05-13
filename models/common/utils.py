@@ -3,6 +3,9 @@ import torch.nn as nn
 from scipy import ndimage
 import numpy as np
 import torch.nn.functional as F
+import random
+from functools import partial
+import torch.distributed as dist
 
 class DiceLoss(nn.Module):
     def __init__(self, n_classes):
@@ -77,7 +80,6 @@ class RMSNorm(nn.Module):
     def forward(self,x):
         return F.normalize(x,dim=1) * self.g * (x.shape[1] ** 0.5)
          
-
     
 class EMA(object):
     # v(t) = decay*v(t-1) + (1-decay)*theta(t)
@@ -124,3 +126,83 @@ class EMA(object):
                 assert name in self.backup
                 param.data = self.backup[name]
         self.backup = {}
+        
+  
+def init_setup(allow_tf32=True, seed=317):     
+
+    torch.backends.cuda.matmul.allow_tf32 = allow_tf32
+    torch.backends.cudnn.allow_tf32 = allow_tf32
+
+    # set the random seed
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+def get_kl_loss(mean, logvar):
+    kl_loss = torch.mean(
+            -0.5 * torch.sum(1+logvar-mean.pow(2)-torch.exp(logvar),1),0)
+
+    return kl_loss
+    
+def get_recon_loss(x, recon_x,):
+    # recon_loss = torch.mean(torch.sum(F.binary_cross_entropy(recon_x,x,reduction='none'),
+    #                                   dim=(1,2,3)))
+    # recon_loss = torch.mean(torch.sum(F.mse_loss(recon_x,x,reduction='none'),
+    #                                   dim=(1,2,3)))
+    
+    recon_loss = torch.abs(x.contiguous() - recon_x.contiguous())
+    recon_loss = torch.sum(recon_loss) / recon_loss.shape[0]
+    return recon_loss   
+
+def ddp_load_checkpoint(load_path):
+    init = torch.load(load_path,
+                      map_location='cuda:%d' % dist.get_rank()) #['model']
+
+    state_dict = {}
+    for k, v in init.items():
+        # remove `module.` ## 多gpu 训练带module默认参数名字,预训练删除
+        name = k[7:] if k.startswith('module.') else k
+        state_dict[name] = v
+    return state_dict
+
+def generate_latents_combinations(input_array, index=0, current_combination=[]):
+    if index == len(input_array):
+        return [current_combination]
+    
+    combinations = []
+    for element in input_array[index]:
+        new_combination = current_combination + [element]
+        combinations.extend(generate_latents_combinations(input_array, index + 1, new_combination))
+    
+    return combinations
+
+def cosine_with_warmup_scheduler(optimizer, num_epochs, batch_size, dataset_size, gpus_world_size):
+    def cosine_warmup(k, num_epochs, batch_size, dataset_size):
+        batch_size *= gpus_world_size
+
+        if gpus_world_size == 1:
+            warmup_iters = 0
+        else:
+            warmup_iters = 1000 // gpus_world_size
+
+        if k < warmup_iters:
+            return (k + 1) / warmup_iters
+        else:
+            iter_per_epoch = (dataset_size + batch_size - 1) // batch_size
+            ratio = (k - warmup_iters) / (num_epochs * iter_per_epoch)
+            return 0.5 * (1 + np.cos(np.pi * ratio))
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer,
+        lr_lambda=partial(cosine_warmup,
+                            num_epochs=num_epochs,
+                            batch_size=batch_size,
+                            dataset_size=dataset_size))
+    
+    return scheduler
+
+
