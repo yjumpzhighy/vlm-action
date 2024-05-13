@@ -662,9 +662,8 @@ class SwinUnet(nn.Module):
             # print(msg)
         else:
             print("none pretrain") 
-     
-     
-        
+
+       
 if __name__ == '__main__':        
     import torchvision
     from torchvision import transforms
