@@ -132,7 +132,7 @@ class MultiHeadsAttention(nn.Module):
         out = rearrange(out, 'b h (x y) c -> b (h c) x y', x=h, y=w) #[b, heads*channel_head,h,w]
         out = self.ffn(out)  #[b,c,h,w]
 
-        return out
+        return out+x
 
 
 class MultiHeadsLinearAttention(nn.Module):
@@ -150,9 +150,10 @@ class MultiHeadsLinearAttention(nn.Module):
         self.norm = RMSNorm(channel_in)
         self.mem_kv = nn.Parameter(torch.randn(2,heads,num_mem_kv,channel_head))
         
-    def forward(self, x):
+    def forward(self, x, cond=None):
         b, c, h, w = x.shape
-
+        x_clone = x.clone()
+        
         x = self.norm(x)
         qkv = self.qkv(x).chunk(3, dim=1)
         #[b,heads,h*w,channel_head]
@@ -169,7 +170,7 @@ class MultiHeadsLinearAttention(nn.Module):
         out = q @ attn #[b,heads,h*w,channlel_head]
         out = rearrange(out, 'b h (x y) c -> b (h c) x y', x=h, y=w) #[b, heads*channel_head,h,w]
         out = self.ffn(out)  #[b,c,h,w]
-        return out
+        return out+x_clone
 
 
 class Downsample(nn.Module):
@@ -210,17 +211,110 @@ class Upsample(nn.Module):
         return self.upsample(x)
 
 
+class MultiHeadsCrossLinearAttention(nn.Module):
+    def __init__(self, query_channel, context_channel=None, heads=8, channel_head=64, dropout=0.):
+        super().__init__()
+        hidden_dim = channel_head * heads
+        context_channel = context_channel if context_channel is not None else query_channel
+
+        self.scale = channel_head ** -0.5
+        self.heads= heads
+        self.to_q = nn.Linear(query_channel, hidden_dim, bias=False)
+        self.to_k = nn.Linear(context_channel, hidden_dim, bias=False)
+        self.to_v = nn.Linear(context_channel, hidden_dim, bias=False)
+        
+        self.ffn = nn.Sequential(nn.Conv2d(hidden_dim, query_channel, 1),
+                                 RMSNorm(query_channel))
+        self.softmax = nn.Softmax(dim=-1)
+        self.attn_drop = nn.Dropout(dropout)
+        self.norm = RMSNorm(query_channel)
+
+    def forward(self, x, context=None, mask=None):
+        b,c,h,w = x.shape
+        
+        x_in = x.clone()
+        x = self.norm(x)
+        x = rearrange(x, 'b c h w -> b (h w) c')
+        
+        context = context if context is not None else x
+
+        q = self.to_q(x) #[b,n,channel_head*heads]
+        k = self.to_k(context) #[b,l,channel_head*heads]
+        v = self.to_v(context) #[b,l,channel_head*heads]
+
+        #[b*heads,n,channel_head]
+        q,k,v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=self.heads),(q,k,v))
+
+        # q = q * self.scale
+        # attn = (q @ k.transpose(-2, -1))  #[b*heads,n,n]
+        
+        q = q.softmax(dim=-1)
+        k = k.softmax(dim=-2)
+        q = q * self.scale
+        attn = k.transpose(-2, -1) @ v  #[b*heads,n,l]
+
+
+        if mask is not None:
+            pass
+
+ 
+        attn = self.attn_drop(attn)
+        out = q @ attn
+        out = rearrange(out, '(b h) n d -> b n (h d)', h=self.heads) #[b, n, heads*channel_head]
+        out = rearrange(out, 'b (h w) c -> b c h w', h=h, w=w) #[b, heads*channel_head, h, w]
+        
+        out = self.ffn(out) #[b,c,h,w]
+
+        return out + x_in
+
+
+class MultiHeadsCrossAttentionBlock(nn.Module):
+    def __init__(self, query_channel, context_channel=None, heads=4, channel_head=32, dropout=0.):
+        super().__init__()
+        #self atten
+        self.attn1 = MultiHeadsCrossLinearAttention(query_channel=query_channel,context_channel=None,
+                                              heads=heads, channel_head=channel_head, dropout=dropout)
+        #cross atten                                      
+        self.attn2 = MultiHeadsCrossLinearAttention(query_channel=query_channel,context_channel=context_channel,
+                                              heads=heads, channel_head=channel_head, dropout=dropout)
+        #(todo):try gated gelu
+        self.ffn = nn.Sequential(
+            nn.Linear(query_channel, query_channel*4),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(query_channel*4, query_channel)
+        )
+
+        self.norm1 = nn.LayerNorm(query_channel)
+        self.norm2 = nn.LayerNorm(query_channel)
+        self.norm3 = nn.LayerNorm(query_channel)
+    def forward(self, x, context=None):
+        b,c,h,w = x.shape
+        
+        x_in = x.clone()
+        x = rearrange(x, 'b c h w -> b (h w) c', h=h,w=w)
+        
+        x = self.attn1(self.norm1(x)) + x
+        x = self.attn2(self.norm2(x),context=context) + x
+        x = self.ffn(self.norm3(x)) + x
+        
+        x = rearrange(x, 'b (h w) c -> b c h w', h=h,w=w)
+        return x + x_in
+
+
 class ConditionalUNet(nn.Module):
     def __init__(self,
                  image_h=32,
                  image_w=32,
                  image_c=3,
                  base_channel=64,
-                 channel_mults=(1, 2, 4, 8),
+                 channel_mults=(1, 2, 4, 4),
                  output_channel=64,
                  self_condition=False,
                  resnet_block_groups=8,
-                 short_cuts=True):
+                 short_cuts=True,
+                 use_crossattn=False,
+                 context_c=512):
         super().__init__()
 
         self.self_condition = self_condition
@@ -251,6 +345,7 @@ class ConditionalUNet(nn.Module):
                              resnet_block_groups),
                     ResBlock(channels_in[ind], channels_in[ind], time_channel,
                              resnet_block_groups),
+                    MultiHeadsCrossLinearAttention(channels_in[ind], context_c) if use_crossattn else
                     MultiHeadsLinearAttention(channels_in[ind]),
                     Downsample(channels_in[ind], channels_out[ind])
                     if not is_last else nn.Conv2d(
@@ -269,6 +364,7 @@ class ConditionalUNet(nn.Module):
             nn.ModuleList([
                 ResBlock(channels_out[-1], channels_out[-1], time_channel,
                          resnet_block_groups),
+                MultiHeadsCrossLinearAttention(channels_out[-1], context_c) if use_crossattn else
                 MultiHeadsLinearAttention(channels_out[-1]),
                 ResBlock(channels_out[-1], channels_out[-1], time_channel,
                          resnet_block_groups),
@@ -285,6 +381,7 @@ class ConditionalUNet(nn.Module):
                     ResBlock(channels_out[ind] + channels_in[ind] if short_cuts else channels_out[ind],
                              channels_out[ind], time_channel,
                              resnet_block_groups),
+                    MultiHeadsCrossLinearAttention(channels_out[ind], context_c) if use_crossattn else
                     MultiHeadsLinearAttention(channels_out[ind]),
                     Upsample(channels_out[ind], channels_in[ind])
                     if not is_last else nn.Conv2d(
@@ -311,13 +408,16 @@ class ConditionalUNet(nn.Module):
                 nn.Linear(output_channel, output_channel)
             ]))
 
-    def forward(self, x, time=None, x_self_cond=None):
-        # x[b,3,h,w]
+    def get_last_layer(self):
+        return self.head[0][1].weight
+
+    def forward(self, x, time=None, cond=None):
+        # x[b,c,h,w]
         # time[b,]
+        # cond[b,c]
         assert self.short_cuts, f"unet encode-decode process requires shortcuts"
         if self.self_condition:
-            if x_self_cond is None:
-                x_self_cond = torch.zeros_like(x)
+            x_self_cond = torch.zeros_like(x)
             x = torch.cat((x_self_cond, x), dim=1)  #[b,2*3,h,w]
 
         x = self.stem(x)  #[b,64,h,w]
@@ -331,14 +431,14 @@ class ConditionalUNet(nn.Module):
             shortcut.append(x)
 
             x = block2(x, t)
-            x = attn(x) + x
+            x = attn(x, cond)
             shortcut.append(x)
 
             x = downsample(x)
 
         for block1, attn, block2 in self.mids:
             x = block1(x, t)
-            x = attn(x) + x
+            x = attn(x, cond)
             x = block2(x, t)
 
         for block1, block2, attn, upsample in self.ups:
@@ -347,7 +447,7 @@ class ConditionalUNet(nn.Module):
 
             x = torch.cat((x, shortcut.pop()), dim=1)
             x = block2(x, t)
-            x = attn(x) + x
+            x = attn(x, cond)
 
             x = upsample(x)
 
@@ -358,45 +458,39 @@ class ConditionalUNet(nn.Module):
 
         return x
 
-    def encode(self,x,time=None,x_self_cond=None):
+    def encode(self,x,time=None,cond=None):
         # x[b,3,h,w]
         # time[b,]
 
         if self.self_condition:
-            if x_self_cond is None:
-                x_self_cond = torch.zeros_like(x)
+            x_self_cond = torch.zeros_like(x)
             x = torch.cat((x_self_cond, x), dim=1)  #[b,2*3,h,w]
 
         x = self.stem(x)  #[b,64,h,w]
 
         t = self.time_mlp(time) if time is not None else None  #[b,256]
 
-        #shortcut = []
+
         for block1, block2, attn, downsample in self.downs:
             x = block1(x, t)
-            #shortcut.append(x)
-
             x = block2(x, t)
-            #x = attn(x)
-            #shortcut.append(x)
-
+            x = attn(x,cond)
             x = downsample(x)
-
 
         for block1, attn, block2 in self.mids:
             x = block1(x, t)
-            #x = attn(x)
+            x = attn(x, cond)
             x = block2(x, t)
             
         return x #[b,h/8,w/8,512]
   
-    def decode(self, x, time=None):
+    def decode(self, x, time=None, cond=None):
         assert not self.short_cuts, f"unet short cuts not supported in decode-only process"
         t = self.time_mlp(time) if time is not None else None  #[b,256]
         for block1, block2, attn, upsample in self.ups:
             x = block1(x, t)
             x = block2(x, t)
-            #x = attn(x)
+            x = attn(x, cond)
 
             x = upsample(x)
 
