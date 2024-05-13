@@ -4,7 +4,20 @@ Brief tutorial vision-launguage large model related works: modeling, finetune, p
 
 
 ## 1. Modeling
-(TO BE UPDATED)
+### 1.1 Diffuser
+Diffusion model is usually used for high-quality image generation. The principle is by add noise during 
+training and denoise in generation process. In this section, several STOA diffusion models, like vae, 
+ddpm, ddim, ldm, DiT, etc.
+[deepspeed overview doc] (https://github.com/yzy-jumphigh/vlm-action/blob/main/models/README.md)  
+
+    #run autoencoder
+    python models/vae.py
+    #run ddpm
+    python models/ddpm.py
+    #run ddim
+    python models/ddim.py
+    #run ldm, ddp training used
+    CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node 1 models/stable_diffuser.py
 
 
 ## 2. Training
@@ -17,12 +30,12 @@ Talk about how to utilize zero on large model training, and, how to apply deepsp
     #multi gpus
     deepspeed training/llama2_clm_sft_lora_with_zero.py
 
-How effective deepspeed would be?
+How effective deepspeed would be? 
 [Deepspeed memory quantitative analysis](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/README.md)
 
 
 ## 3. Finetune
-Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning v2, lora. 
+Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning v2, lora.     
 [finetune methods overivew](https://github.com/yzy-jumphigh/vlm-action/blob/main/finetune/README.md)  
 
     #lora
@@ -37,7 +50,7 @@ Cover common large model finetune strategies prefix, prompt, p-tuning, p-tuning 
     #prompt
     python finetune/llama2_prompt.py
 
-How effective LORA would be?
+How effective LORA would be? 
 [LORA memory quantitative analysis](https://github.com/yzy-jumphigh/vlm-action/blob/main/training/README.md)
     
 
