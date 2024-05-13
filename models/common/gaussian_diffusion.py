@@ -94,9 +94,14 @@ class GaussianDiffusion(nn.Module):
         signal_noise_ratio = self.alphas_cumprod / (1 - self.alphas_cumprod)
         loss_weight = signal_noise_ratio / (signal_noise_ratio + 1)
         self.register_buffer('loss_weight', loss_weight.to(torch.float32))
+        
+        self.logvar_regulizer = torch.zeros(size=(self.timesteps,))
+        #self.logvar_regulizer = nn.Parameter(torch.zeros(size=(self.timesteps,)))  
+        
+        #TODO(): LVLB weights
 
     def normalize_img(self, img):
-        # img is normalized form 0-255 to 0-1
+        # input img is 0-1
         # normalize to [-1,1]
         return 2 * img - 1
 
@@ -112,8 +117,8 @@ class GaussianDiffusion(nn.Module):
                extract(self.sqrt_one_minus_alphas_cumprod, t, x0.shape) * noise
         return out
 
-    def model_prediction(self, xt, t, x_self_cond=None, clip_x0=False, rederive_pred_noise=False):
-        model_out = self.model(xt, t, x_self_cond)
+    def model_prediction(self, xt, t, cond=None, clip_x0=False, rederive_pred_noise=False):
+        model_out = self.model(xt, t, cond)
         #maybe_clip = torch.clamp(-1,1) if clip_x0 else t
 
         if self.objective == 'pred_noise':
@@ -128,8 +133,7 @@ class GaussianDiffusion(nn.Module):
             # recalculate noise rather than direct model output
             # if clip_x0 and rederive_pred_noise:
             #     pred_noise = (extract(self.sqrt_reciprocal_alphas_cumprod,t,xt.shape) * xt - pred_x0) / \
-            #        extract(self.sqrt_reciprocal_minus_one_alphas_cumprod,t,xt.shape)
-                
+            #        extract(self.sqrt_reciprocal_minus_one_alphas_cumprod,t,xt.shape)  
         elif self.objective == 'pred_x0':
             pred_x0 = model_out
             if clip_x0:
@@ -149,21 +153,21 @@ class GaussianDiffusion(nn.Module):
             raise ValueError("type not supported")
         return pred_noise, pred_x0
 
-    def p_losses(self, x0, t):
+    def p_losses(self, x0, t, cond=None):
         b, c, h, w = x0.shape
         noise = torch.randn_like(x0, device=x0.device)  # N(0,I) distribution
 
         # forward from x0 to xt
         xt = self.q_sample(x0, t, noise)  #[b,c,h,w]
 
-        # predicted x0 from xt
-        x_self_cond = None
-        if self.self_condition and random() < 0.5:
-            with torch.no_grad():
-                x_self_cond = self.model_prediction(xt, t)[1]
-                x_self_cond.detach_()
+        # # predicted x0 from xt
+        # x_self_cond = None
+        # if self.self_condition and random() < 0.5:
+        #     with torch.no_grad():
+        #         x_self_cond = self.model_prediction(xt, t)[1]
+        #         x_self_cond.detach_()
 
-        model_out = self.model(xt, t, x_self_cond)
+        model_out = self.model(xt, t, cond)
 
         if self.objective == 'pred_noise':
             target = noise
@@ -184,30 +188,30 @@ class GaussianDiffusion(nn.Module):
         #loss = loss * extract(self.loss_weight, t, loss.shape)
         return loss.mean()
 
-    def forward(self, img):
+    def forward(self, img, cond=None):
         # img normalized from 0~1
         b, c, h, w = img.shape
         self.device = img.device
 
         t = torch.randint(0, self.timesteps, (b, ), device=self.device).long()
         img = self.normalize(img)
-        loss = self.p_losses(img, t)
+        loss = self.p_losses(img, t, cond)
         return loss
 
-    def sample(self, batch_size=1):
-        img = torch.randn(
-            (batch_size, self.image_channel, self.image_size, self.image_size),
-            device=self.device)
+    def sample(self, shape, cond=None):
+        # shape: b,c,h,w
+        img = torch.randn(shape, device=self.device)
 
         x0 = None
         for t in tqdm(reversed(range(0, self.timesteps))):
-            x_self_cond = x0 if self.self_condition else None
-            img, x0 = self.p_sample(img, t, x_self_cond)
+            print(img.shape, cond.shape)
+            # x_self_cond = x0 if self.self_condition else None
+            img, x0 = self.p_sample(img, t, cond)
 
         img = self.unnormalize_img(img)
         return img
 
-    def p_sample(self, xt, t, x_self_cond):
+    def p_sample(self, xt, t, cond):
         b, *_ = xt.shape
         device = xt.device
         # [t,t,t,...,t]
@@ -215,14 +219,14 @@ class GaussianDiffusion(nn.Module):
 
         model_mean, model_logvar, x0 = self.p_mean_var(xt,
                                                        batched_times,
-                                                       x_self_cond,
+                                                       cond,
                                                        clip_denoise=True)
         noise = torch.randn_like(xt, device=device) if t > 0 else 0.
         pred_img = model_mean + (0.5 * model_logvar).exp() * noise
         return pred_img, x0
 
-    def p_mean_var(self, xt, t, x_self_cond, clip_denoise=True):
-        preds = self.model_prediction(xt, t, x_self_cond)
+    def p_mean_var(self, xt, t, cond, clip_denoise=True):
+        preds = self.model_prediction(xt, t, cond)
         x0 = preds[1]
 
         if clip_denoise:
@@ -238,21 +242,20 @@ class GaussianDiffusion(nn.Module):
         posterior_logvar = extract(self.posterior_log_var_clipped, t, xt.shape)
         return posterior_mean, posterior_logvar
 
-    def sample_ddim(self, batch_size=1):
+    def sample_ddim(self, shape, cond=None):
         times = torch.linspace(-1,self.timesteps-1,steps=self.ddim_sampling_steps+1) 
         times = list(reversed(times.int().tolist()))
         time_pairs = list(zip(times[:-1],times[1:])) #[[cur,next]]
         
-        img = torch.randn(
-            (batch_size, self.image_channel, self.image_size, self.image_size),
-            device=self.device)
+        img = torch.randn(shape, device=self.device)
+
         
         pred_x0 = None
         for time,time_next in tqdm(time_pairs):
-            times_cond = torch.full((batch_size, ), time, 
+            times_cond = torch.full((img.shape[0], ), time, 
                                         device=self.device, dtype=torch.long)
-            self_cond = pred_x0 if self.self_condition else None
-            pred_noise, pred_x0 = self.model_prediction(img, times_cond, self_cond, True)
+            # self_cond = pred_x0 if self.self_condition else None
+            pred_noise, pred_x0 = self.model_prediction(img, times_cond, cond, True)
 
             if time_next < 0:
                 img = pred_x0
