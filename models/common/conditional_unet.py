@@ -7,6 +7,7 @@ from einops import rearrange, reduce, repeat
 from functools import partial
 
 from .utils import RMSNorm
+from typing import Optional, Tuple
 
 class PositionalEmbedding(nn.Module):
     def __init__(self, dmodel, scale=1.0):
@@ -44,23 +45,25 @@ class NormalizedConv2d(nn.Conv2d):
 
 
 class Block(nn.Module):
-    def __init__(self, channel_in, channel_out, groups):
+    def __init__(self, channel_in, channel_out, groups=32, dropout=0.0):
         super().__init__()
         self.channel_in = channel_in
         self.channel_out = channel_out
-        #self.conv = NormalizedConv2d(channel_in, channel_out, 3, padding=1)
-        self.conv = nn.Conv2d(channel_in, channel_out, 3, padding=1)
-        self.norm = nn.GroupNorm(groups, channel_out)  #?how about batch norm?
-        #self.norm = nn.BatchNorm2d(channel_out)
+        self.norm = nn.GroupNorm(groups, channel_in, eps=1e-6, affine=True) 
         self.act = nn.SiLU()  #?how about relu
-
-    def forward(self, x, scale_shift=None):
-        x = self.conv(x)
+        self.dropout = nn.Dropout(dropout)
+        self.conv = nn.Conv2d(channel_in, channel_out, 3, padding=1)
+        
+    def forward(self, x):
         x = self.norm(x)
-        if scale_shift is not None:
-            scale, shift = scale_shift
-            x = x * (scale + 1.0) + shift
         x = self.act(x)
+        x = self.dropout(x)
+        x = self.conv(x)
+        
+        # if scale_shift is not None:
+        #     scale, shift = scale_shift
+        #     x = x * (scale + 1.0) + shift
+        
         return x
 
 
@@ -70,36 +73,38 @@ class ResBlock(nn.Module):
         super().__init__()
 
         self.mlp = nn.Sequential(
-            nn.SiLU(), nn.Linear(time_embedding_channel, channel_out * 2))
+            nn.SiLU(), nn.Linear(time_embedding_channel, channel_out))
 
-        self.block1 = Block(channel_in, channel_out, groups=groups)
-        self.block2 = Block(channel_out, channel_out, groups=groups)
+        self.block1 = Block(channel_in, channel_out, groups=groups, dropout=0.0)
+        self.block2 = Block(channel_out, channel_out, groups=groups, dropout=0.0)
 
         self.shortcut = nn.Sequential(
             nn.Conv2d(channel_in, channel_out, 1),
             nn.BatchNorm2d(channel_out)
         ) if channel_in != channel_out else nn.Identity()
 
-    def forward(self, x, time_embedding=None):
+    def forward(self, x, time_embedding=None, cond=None):
+        h = self.block1(x)
+
         scale_shift = None
         if time_embedding is not None:
             time_embedding = self.mlp(time_embedding)
             time_embedding = time_embedding[:, :, None, None]
-            scale_shift = time_embedding.chunk(2, dim=1)
+            # scale_shift = time_embedding.chunk(2, dim=1)
+            h = h + time_embedding
 
-        h = self.block1(x, scale_shift)
-        h = self.block2(h)
+        h = self.block2(h)   
         return h + self.shortcut(x)
 
 
 class MultiHeadsAttention(nn.Module):
-    def __init__(self, channel_in, heads=4, channel_head=32, num_mem_kv=4, dropout=0.):
+    def __init__(self, channel_in, heads=-1, channel_head=32, num_mem_kv=4, dropout=0.):
         super().__init__()
         self.scale = channel_head**-0.5
-        self.heads = heads
+        self.heads = int(channel_in / channel_head) if heads==-1 else heads
         self.channel_head = channel_head
-        hidden_dim = heads * channel_head
-        
+        hidden_dim = self.heads * self.channel_head
+
         self.qkv = nn.Conv2d(channel_in, hidden_dim * 3, 1,
                              bias=False)  #linear?
         # self.ffn = nn.Conv2d(hidden_dim, channel_in, 1)  #linear?
@@ -109,19 +114,15 @@ class MultiHeadsAttention(nn.Module):
         self.attn_drop = nn.Dropout(dropout)
         
         self.norm = RMSNorm(channel_in)
-        self.mem_kv = nn.Parameter(torch.randn(2,heads,num_mem_kv,channel_head))
 
-    def forward(self, x):
+
+    def forward(self, x, time_embedding=None, cond=None):
         b, c, h, w = x.shape
 
         x = self.norm(x)
         qkv = self.qkv(x).chunk(3, dim=1)
         #[b,heads,h*w,channel_head]
         q,k,v = map(lambda t: rearrange(t, 'b (h c) x y -> b h (x y) c', h=self.heads),qkv)
-        
-        # #[b,heads,num_mem_kv,channel_head]
-        # mk,mv = map(lambda t: repeat(t, 'h n c -> b h n c', b=b), self.mem_kv)
-        # k,v = map(partial(torch.cat, dim=-2), ((mk,k),(mv,v)))
         
         q = q * self.scale
         attn = (q @ k.transpose(-2, -1))  #[b,heads,h*w,h*w]
@@ -150,7 +151,7 @@ class MultiHeadsLinearAttention(nn.Module):
         self.norm = RMSNorm(channel_in)
         self.mem_kv = nn.Parameter(torch.randn(2,heads,num_mem_kv,channel_head))
         
-    def forward(self, x, cond=None):
+    def forward(self, x, time_embedding=None, cond=None):
         b, c, h, w = x.shape
         x_clone = x.clone()
         
@@ -231,12 +232,17 @@ class MultiHeadsCrossLinearAttention(nn.Module):
 
     def forward(self, x, context=None, mask=None):
         b,c,h,w = x.shape
-        
-        x_in = x.clone()
         x = self.norm(x)
-        x = rearrange(x, 'b c h w -> b (h w) c')
+        x_in = x.clone()
         
-        context = context if context is not None else x
+        if context is None:
+            context = x
+            context = rearrange(context, 'b c h w -> b (h w) c')
+        elif context.dim()==2: #time embedding [b,c]
+            context = context[:,:,None]
+            context = rearrange(context, 'b c l -> b l c')
+ 
+        x = rearrange(x, 'b c h w -> b (h w) c')
 
         q = self.to_q(x) #[b,n,channel_head*heads]
         k = self.to_k(context) #[b,l,channel_head*heads]
@@ -269,38 +275,472 @@ class MultiHeadsCrossLinearAttention(nn.Module):
 
 
 class MultiHeadsCrossAttentionBlock(nn.Module):
-    def __init__(self, query_channel, context_channel=None, heads=4, channel_head=32, dropout=0.):
+    def __init__(self, query_channel, output_channel=None, context_channel=None, heads=4, channel_head=32, dropout=0.):
         super().__init__()
+        if output_channel == None:
+            output_channel = query_channel
         #self atten
-        self.attn1 = MultiHeadsCrossLinearAttention(query_channel=query_channel,context_channel=None,
+        self.attn1 = MultiHeadsCrossLinearAttention(query_channel=query_channel,context_channel=context_channel,
                                               heads=heads, channel_head=channel_head, dropout=dropout)
         #cross atten                                      
         self.attn2 = MultiHeadsCrossLinearAttention(query_channel=query_channel,context_channel=context_channel,
                                               heads=heads, channel_head=channel_head, dropout=dropout)
         #(todo):try gated gelu
-        self.ffn = nn.Sequential(
-            nn.Linear(query_channel, query_channel*4),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(query_channel*4, query_channel)
-        )
+        # self.ffn = nn.Sequential(
+        #     nn.Linear(query_channel, query_channel*4),
+        #     nn.GELU(),
+        #     nn.Dropout(dropout),
+        #     nn.Linear(query_channel*4, query_channel)
+        # )
+        self.ffn = nn.Sequential(nn.Conv2d(query_channel, output_channel, 1),
+                                 RMSNorm(output_channel))  
 
-        self.norm1 = nn.LayerNorm(query_channel)
-        self.norm2 = nn.LayerNorm(query_channel)
-        self.norm3 = nn.LayerNorm(query_channel)
+        self.norm1 = RMSNorm(query_channel)
+        self.norm2 = RMSNorm(query_channel)
+        self.norm3 = RMSNorm(query_channel)
+
+        if query_channel != output_channel:
+            self.conv_shortcut = nn.Conv2d(
+                query_channel,
+                output_channel,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                bias=True,
+            )
+        else:
+            self.conv_shortcut = nn.Identity()
     def forward(self, x, context=None):
         b,c,h,w = x.shape
         
         x_in = x.clone()
-        x = rearrange(x, 'b c h w -> b (h w) c', h=h,w=w)
+        #x = rearrange(x, 'b c h w -> b (h w) c', h=h,w=w)
         
-        x = self.attn1(self.norm1(x)) + x
-        x = self.attn2(self.norm2(x),context=context) + x
-        x = self.ffn(self.norm3(x)) + x
+        x = self.attn1(self.norm1(x)) 
+        x = self.attn2(self.norm2(x), context=context) 
+        x = self.ffn(self.norm3(x))
         
-        x = rearrange(x, 'b (h w) c -> b c h w', h=h,w=w)
-        return x + x_in
+        #x = rearrange(x, 'b (h w) c -> b c h w', h=h,w=w)
+        return x + self.conv_shortcut(x_in)
 
+
+#############Implemented new version#############
+
+class Upsample2D(nn.Module):
+    def __init__(
+        self,
+        channels: int,
+        out_channels: Optional[int] = None,
+        norm_type=None,
+
+    ):
+        super().__init__()
+        self.channels = channels
+        self.out_channels = out_channels or channels
+
+        if norm_type == "ln_norm":
+            self.norm = nn.LayerNorm(channels)
+        elif norm_type == "rms_norm":
+            self.norm = RMSNorm(channels)
+        elif norm_type is None:
+            self.norm = None
+        else:
+            raise ValueError(f"unknown norm_type: {norm_type}")
+
+        
+        self.conv = nn.Conv2d(self.channels, self.out_channels, kernel_size=3, padding=1, bias=True)
+
+    def forward(self, hidden_states: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        assert hidden_states.shape[1] == self.channels
+
+        if self.norm is not None:
+            hidden_states = self.norm(hidden_states.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+   
+        hidden_states = F.interpolate(hidden_states, scale_factor=2.0, mode="nearest")
+        hidden_states = self.conv(hidden_states)    
+
+        return hidden_states
+
+
+class Downsample2D(nn.Module):
+    def __init__(
+        self,
+        channels: int,
+        out_channels: Optional[int] = None,
+        norm_type=None,
+    ):
+        super().__init__()
+        self.channels = channels
+        self.out_channels = out_channels or channels
+
+        if norm_type == "ln_norm":
+            self.norm = nn.LayerNorm(channels, eps, elementwise_affine)
+        elif norm_type is None:
+            self.norm = None
+        else:
+            raise ValueError(f"unknown norm_type: {norm_type}")
+
+
+        self.conv = nn.Conv2d(
+            self.channels, self.out_channels, kernel_size=3, stride=2, padding=1, bias=True
+        )
+    
+
+    def forward(self, hidden_states: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        assert hidden_states.shape[1] == self.channels
+
+        if self.norm is not None:
+            hidden_states = self.norm(hidden_states.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+
+        hidden_states = self.conv(hidden_states)
+
+        return hidden_states
+
+
+class ResBasicBlock2D(nn.Module):
+    def __init__(
+        self,
+        *,
+        in_channels: int,
+        out_channels: int,
+        conv_shortcut: bool = False,
+        temb_channels: int = 512,
+        groups: int = 32,
+        dropout=0.0,        
+        time_embedding_norm: str = "default",  # default, scale_shift,
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        out_channels = in_channels if out_channels is None else out_channels
+        self.out_channels = out_channels
+        self.time_embedding_norm = time_embedding_norm
+
+
+        self.norm1 = torch.nn.GroupNorm(num_groups=groups, num_channels=in_channels, affine=True)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        if temb_channels is not None:
+            self.time_emb_proj = nn.Linear(temb_channels, out_channels) 
+        else:
+            self.time_emb_proj = None
+
+        self.norm2 = torch.nn.GroupNorm(num_groups=groups, num_channels=out_channels, affine=True)
+        self.dropout = torch.nn.Dropout(dropout)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.nonlinearity = nn.SiLU()
+        
+        if self.in_channels != out_channels:
+            self.conv_shortcut = nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                bias=True,
+            )
+        else:
+            self.conv_shortcut = nn.Identity()
+
+    def forward(self, input_tensor: torch.Tensor, temb: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+
+        hidden_states = input_tensor.clone()
+        hidden_states = self.norm1(hidden_states)
+        hidden_states = self.nonlinearity(hidden_states)
+        hidden_states = self.conv1(hidden_states)
+
+        if temb is not None and self.time_emb_proj is not None:
+            temb = self.nonlinearity(temb)
+            temb = self.time_emb_proj(temb)[:, :, None, None]
+
+        if self.time_embedding_norm == "default":
+            if temb is not None:
+                hidden_states = hidden_states + temb
+            hidden_states = self.norm2(hidden_states)
+        elif self.time_embedding_norm == "scale_shift":
+            if temb is None:
+                raise ValueError(
+                    f" `temb` should not be None when `time_embedding_norm` is {self.time_embedding_norm}"
+                )
+            time_scale, time_shift = torch.chunk(temb, 2, dim=1)
+            hidden_states = self.norm2(hidden_states)
+            hidden_states = hidden_states * (1 + time_scale) + time_shift
+        else:
+            hidden_states = self.norm2(hidden_states)
+
+        hidden_states = self.nonlinearity(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+        output_tensor = (self.conv_shortcut(input_tensor) + hidden_states)
+
+        return output_tensor
+
+
+class ResDownBlock2D(nn.Module):
+    def __init__(self, num_layers, in_channels, out_channels,
+                  temb_channels=None, resnet_groups=32, dropout=0.0, add_downsample=False):
+        super().__init__()
+        resnets = []
+
+        for i in range(num_layers):
+            in_channels = in_channels if i == 0 else out_channels
+            resnets.append(
+                ResBasicBlock2D(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    temb_channels=temb_channels 
+                )
+            )
+
+        self.resnets = nn.ModuleList(resnets)
+
+        if add_downsample:
+            self.downsamplers = nn.ModuleList(
+                [
+                    Downsample2D(
+                        out_channels, out_channels=out_channels
+                    )
+                ]
+            )
+        else:
+            self.downsamplers = None      
+         
+
+    def forward(
+        self, hidden_states: torch.Tensor, temb: Optional[torch.Tensor] = None, 
+        context: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Tuple[torch.Tensor, ...]]:
+        
+        output_states = ()
+        for resnet in self.resnets:
+            hidden_states = resnet(hidden_states, temb)
+            output_states = output_states + (hidden_states,)
+
+        if self.downsamplers is not None:
+            for downsampler in self.downsamplers:
+                hidden_states = downsampler(hidden_states)
+
+            output_states = output_states + (hidden_states,)
+
+        return hidden_states, output_states
+
+class AttnDownBlock2D(nn.Module):
+    def __init__(
+        self,
+        in_channels, out_channels, temb_channels=None, context_channels=None, num_layers=1, 
+        resnet_groups=32, dropout=0.0, add_downsample=False, attention_head_dim=32):
+        super().__init__()
+        resnets = []
+        attns = []
+
+        for i in range(num_layers):
+            in_channels = in_channels if i == 0 else out_channels
+            resnets.append(
+                ResBasicBlock2D(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    temb_channels=temb_channels 
+                )
+            )
+            attns.append(
+                MultiHeadsCrossAttentionBlock(
+                    query_channel = out_channels, 
+                    context_channel=context_channels, 
+                    heads=(out_channels//attention_head_dim), 
+                    channel_head=attention_head_dim, 
+                    dropout=0.
+                )
+            )
+        self.resnets = nn.ModuleList(resnets)
+        self.attentions = nn.ModuleList(attns)
+
+        self.context_channels = context_channels
+        if add_downsample:
+            self.downsamplers = nn.ModuleList(
+                [
+                    Downsample2D(
+                        out_channels, out_channels=out_channels
+                    )
+                ]
+            )
+        else:
+            self.downsamplers = None      
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        temb: Optional[torch.Tensor] = None,
+        context: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Tuple[torch.Tensor, ...]]:
+
+        output_states = ()
+        for resnet, attn in zip(self.resnets, self.attentions):
+            hidden_states = resnet(hidden_states, temb)
+            output_states = output_states + (hidden_states,)
+            hidden_states = attn(hidden_states, context)
+            output_states = output_states + (hidden_states,)
+
+        if self.downsamplers is not None:
+            for downsampler in self.downsamplers:
+                hidden_states = downsampler(hidden_states)
+
+            output_states = output_states + (hidden_states,)
+
+        return hidden_states, output_states
+
+class AttnUpBlock2D(nn.Module):
+    def __init__(self,
+                in_channels, out_channels, prev_output_channel, temb_channels=None, 
+                context_channels=None, num_layers=2,  resnet_groups=32, dropout=0.0, 
+                add_upsample=False, add_down_up_skip=True, attention_head_dim=32):
+        super().__init__()
+        self.add_down_up_skip = add_down_up_skip
+        layers = []
+
+        for i in range(num_layers):
+            res_skip_channels = in_channels if (i == num_layers - 1) else out_channels
+            resnet_in_channels = prev_output_channel if i == 0 else out_channels
+            resnet_in_channels = resnet_in_channels + (res_skip_channels if self.add_down_up_skip else 0)
+
+            if i==0:
+                layers.append(
+                    ResBasicBlock2D(
+                        in_channels=resnet_in_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels
+                    )
+                )
+            else:
+                layers.append(
+                    MultiHeadsCrossAttentionBlock(
+                        query_channel = resnet_in_channels,
+                        output_channel = out_channels,
+                        context_channel=context_channels, 
+                        heads=int(resnet_in_channels//attention_head_dim), 
+                        channel_head=attention_head_dim, 
+                        dropout=0.
+                    )
+                )
+
+        self.layers = nn.ModuleList(layers)
+
+        if add_upsample:
+            self.upsamplers = nn.ModuleList([Upsample2D(out_channels, out_channels=out_channels)])
+        else:
+            self.upsamplers = None
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        res_hidden_states_tuple: Tuple[torch.Tensor, ...],
+        temb: Optional[torch.Tensor] = None,
+        context: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        for layer in self.layers:
+            # pop res hidden states
+            if self.add_down_up_skip:
+                res_hidden_states = res_hidden_states_tuple[-1]
+                res_hidden_states_tuple = res_hidden_states_tuple[:-1]
+                hidden_states = torch.cat([hidden_states, res_hidden_states], dim=1)
+            hidden_states = layer(hidden_states, context)
+            
+        if self.upsamplers is not None:
+            for upsampler in self.upsamplers:
+                hidden_states = upsampler(hidden_states)
+
+        return hidden_states
+
+class ResUpBlock2D(nn.Module):
+    def __init__(self, num_layers,
+                        in_channels,
+                        out_channels,
+                        prev_output_channel,
+                        temb_channels,
+                        add_down_up_skip=True,
+                        add_upsample=True):
+        super().__init__()
+        self.add_down_up_skip = add_down_up_skip
+        layers = []
+        for i in range(num_layers):
+            res_skip_channels = in_channels if (i == num_layers - 1) else out_channels
+            resnet_in_channels = prev_output_channel if i == 0 else out_channels
+            layers.append(
+                ResBasicBlock2D(
+                    in_channels=resnet_in_channels + (res_skip_channels if self.add_down_up_skip else 0),
+                    out_channels=out_channels,
+                    temb_channels=temb_channels
+                )
+            )
+
+        self.layers = nn.ModuleList(layers)
+
+        if add_upsample:
+            self.upsamplers = nn.ModuleList([Upsample2D(out_channels, out_channels=out_channels)])
+        else:
+            self.upsamplers = None
+
+        self.gradient_checkpointing = False
+        
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        res_hidden_states_tuple: Tuple[torch.Tensor, ...],
+        temb: Optional[torch.Tensor] = None,
+        context: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        for layer in self.layers:
+            # pop res hidden states
+            if self.add_down_up_skip:
+                res_hidden_states = res_hidden_states_tuple[-1]
+                res_hidden_states_tuple = res_hidden_states_tuple[:-1]
+                hidden_states = torch.cat([hidden_states, res_hidden_states], dim=1)
+            hidden_states = layer(hidden_states, temb)
+
+        if self.upsamplers is not None:
+            for upsampler in self.upsamplers:
+                hidden_states = upsampler(hidden_states)
+
+        return hidden_states
+
+class ResMidBlock2D(nn.Module):
+    def __init__(self, in_channels, temb_channels, num_layers=1):
+        super().__init__()
+
+        resnets = [
+                ResBasicBlock2D(
+                    in_channels=in_channels,
+                    out_channels=in_channels,
+                    temb_channels=temb_channels
+                )
+        ]
+
+        attentions = []
+        for _ in range(num_layers):
+                attentions.append(
+                    # MultiHeadsCrossLinearAttention(
+                    #     in_channels, temb_channels,
+                    #     heads=in_channels // 8, 
+                    #     channel_head=8
+                    # )
+                    AttnDownBlock2D(in_channels=in_channels, out_channels=in_channels, 
+                                    temb_channels=temb_channels, context_channels=None, 
+                                    num_layers=1, resnet_groups=32, dropout=0.0, 
+                                    add_downsample=False, attention_head_dim=32)
+                )
+                resnets.append(
+                    ResBasicBlock2D(
+                        in_channels=in_channels,
+                    out_channels=in_channels,
+                    temb_channels=temb_channels)
+                )
+        self.attentions = nn.ModuleList(attentions)
+        self.resnets = nn.ModuleList(resnets)
+
+    def forward(self, hidden_states, temb = None, context=None) -> torch.Tensor:
+        hidden_states = self.resnets[0](hidden_states, temb)
+        for attn, resnet in zip(self.attentions, self.resnets[1:]):
+            if attn is not None:
+                hidden_states = attn(hidden_states, temb)[0]
+            hidden_states = resnet(hidden_states, temb)
+
+        return hidden_states
 
 class ConditionalUNet(nn.Module):
     def __init__(self,
@@ -310,266 +750,156 @@ class ConditionalUNet(nn.Module):
                  base_channel=64,
                  channel_mults=(1, 2, 4, 4),
                  output_channel=64,
-                 self_condition=False,
-                 resnet_block_groups=8,
-                 short_cuts=True,
-                 use_crossattn=False,
-                 context_c=512):
+                 resnet_block_groups=8, 
+                 add_down_up_skip=True,
+                 context_c=None):
         super().__init__()
 
-        self.self_condition = self_condition
-        input_channel = image_c * (2 if self_condition else 1)
-        self.short_cuts = short_cuts
+        self.add_down_up_skip = add_down_up_skip
+        self.input_channel = image_c
+        self.output_channel = output_channel
+        channels = [base_channel * m for m in channel_mults]
+        time_channel = channels[0] * 4
 
-        self.stem = nn.Conv2d(input_channel, base_channel, 1, padding=0)
+        self.stem = nn.Conv2d(self.input_channel, channels[0], kernel_size=3, padding=(1, 1))
 
-        channels = [base_channel] + [base_channel * m for m in channel_mults]
-        channels_in = channels[:-1]
-        channels_out = channels[1:]
-
-        time_channel = base_channel * 4
         self.time_mlp = nn.Sequential(
-            PositionalEmbedding(base_channel),
-            nn.Linear(base_channel, time_channel),
-            nn.GELU(),
+            PositionalEmbedding(channels[0]),
+            nn.Linear(channels[0], time_channel),
+            nn.SiLU(),
             nn.Linear(time_channel, time_channel),
         )
 
         self.downs = nn.ModuleList([])
+        output_channel = channels[0]
+        for i in range(len(channels)):
+            is_last = i == (len(channels) - 1)
+            input_channel = output_channel
+            output_channel = channels[i]
+            if not is_last:
+                self.downs.append(
+                        ResDownBlock2D(num_layers=2, in_channels=input_channel, out_channels=output_channel,
+                                    temb_channels=time_channel, add_downsample=not is_last)
+                )
+            else:
+                self.downs.append(
+                        AttnDownBlock2D(in_channels=input_channel, out_channels=output_channel, 
+                                        temb_channels=time_channel, context_channels=context_c, num_layers=1, 
+                                        resnet_groups=32, dropout=0.0, add_downsample=not is_last, attention_head_dim=32)
+                )
 
-        for ind in range(len(channels_in)):
-            is_last = ind == (len(channels_in) - 1)
-            self.downs.append(
-                nn.ModuleList([
-                    ResBlock(channels_in[ind], channels_in[ind], time_channel,
-                             resnet_block_groups),
-                    ResBlock(channels_in[ind], channels_in[ind], time_channel,
-                             resnet_block_groups),
-                    MultiHeadsCrossLinearAttention(channels_in[ind], context_c) if use_crossattn else
-                    MultiHeadsLinearAttention(channels_in[ind]),
-                    Downsample(channels_in[ind], channels_out[ind])
-                    if not is_last else nn.Conv2d(
-                        channels_in[ind], channels_out[ind], 3, padding=1)
-                ]))
             if not is_last:
                 image_h = image_h // 2
                 image_w = image_w // 2
         self.encoded_image_h = image_h
         self.encoded_image_w = image_w    
-        self.encoded_image_c = channels_out[-1]
+        self.encoded_image_c = channels[-1]
         
 
         self.mids = nn.ModuleList([])
         self.mids.append(
-            nn.ModuleList([
-                ResBlock(channels_out[-1], channels_out[-1], time_channel,
-                         resnet_block_groups),
-                MultiHeadsCrossLinearAttention(channels_out[-1], context_c) if use_crossattn else
-                MultiHeadsLinearAttention(channels_out[-1]),
-                ResBlock(channels_out[-1], channels_out[-1], time_channel,
-                         resnet_block_groups),
-            ]))
+                ResMidBlock2D(in_channels=channels[-1],
+                               temb_channels=time_channel)
+        )
 
         self.ups = nn.ModuleList([])
-        for ind in reversed(range(len(channels_out))):
-            is_last = ind == 0
+        reversed_channels = list(reversed(channels))
+        output_channel = reversed_channels[0]
+        for i in range(len(channels)):
+            is_last = i == len(channels) - 1
+            prev_output_channel = output_channel
+            output_channel = reversed_channels[i]
+            input_channel = reversed_channels[min(i + 1, len(channels) - 1)]
             self.ups.append(
-                nn.ModuleList([
-                    ResBlock(channels_out[ind] + channels_in[ind] if short_cuts else channels_out[ind],
-                             channels_out[ind], time_channel,
-                             resnet_block_groups),
-                    ResBlock(channels_out[ind] + channels_in[ind] if short_cuts else channels_out[ind],
-                             channels_out[ind], time_channel,
-                             resnet_block_groups),
-                    MultiHeadsCrossLinearAttention(channels_out[ind], context_c) if use_crossattn else
-                    MultiHeadsLinearAttention(channels_out[ind]),
-                    Upsample(channels_out[ind], channels_in[ind])
-                    if not is_last else nn.Conv2d(
-                        channels_out[ind], channels_in[ind], 3, padding=1)
-                ]))
+                    ResUpBlock2D(num_layers=3,
+                            in_channels=input_channel,
+                            out_channels=output_channel,
+                            prev_output_channel=prev_output_channel,
+                            temb_channels=time_channel,
+                            add_down_up_skip=add_down_up_skip,
+                            add_upsample=not is_last)
+            )
+
+            # self.ups.append(
+            #         AttnUpBlock2D(input_channel, output_channel, prev_output_channel,
+            #                      temb_channels=time_channel, context_channels=None, num_layers=3, 
+            #                       resnet_groups=32, dropout=0.0, add_upsample=not is_last, 
+            #                       add_down_up_skip=add_down_up_skip, attention_head_dim=32)
+            # )
+
             if not is_last:
                 image_h = image_h * 2
                 image_w = image_w * 2
 
-        self.head = nn.ModuleList([])
-        self.head.append(
-            nn.ModuleList([
-                ResBlock(channels_in[0] + base_channel if short_cuts else channels_in[0],
-                         base_channel,
-                         time_channel, resnet_block_groups),
-                nn.Conv2d(base_channel, output_channel, 1)
-            ]))
-
-        self.classifier = nn.ModuleList([])
-        self.classifier.append(
-            nn.ModuleList([
-                nn.Flatten(),
-                nn.Linear(image_h * image_w * output_channel, output_channel),
-                nn.Linear(output_channel, output_channel)
-            ]))
+    
+        self.head = nn.Sequential(
+                nn.GroupNorm(num_channels=reversed_channels[-1], num_groups=resnet_block_groups),
+                nn.SiLU(),
+                nn.Conv2d(reversed_channels[-1], self.output_channel, kernel_size=3, padding=1)
+        )
 
     def get_last_layer(self):
-        return self.head[0][1].weight
+        return self.head[-1].weight
 
     def forward(self, x, time=None, cond=None):
         # x[b,c,h,w]
         # time[b,]
         # cond[b,c]
-        assert self.short_cuts, f"unet encode-decode process requires shortcuts"
-        if self.self_condition:
-            x_self_cond = torch.zeros_like(x)
-            x = torch.cat((x_self_cond, x), dim=1)  #[b,2*3,h,w]
 
         x = self.stem(x)  #[b,64,h,w]
-        r = x.clone()
-
         t = self.time_mlp(time) if time is not None else None  #[b,256]
 
-        shortcut = []
-        for block1, block2, attn, downsample in self.downs:
-            x = block1(x, t)
-            shortcut.append(x)
+        shortcut = (x,)
+        for block in self.downs:
+            x, res = block(x, t, cond)
+            shortcut += res
 
-            x = block2(x, t)
-            x = attn(x, cond)
-            shortcut.append(x)
+        for block in self.mids:
+            x = block(x, t, cond)
 
-            x = downsample(x)
+        for block in self.ups:
+            if self.add_down_up_skip:
+                res_samples = shortcut[-len(block.layers) :]
+                shortcut = shortcut[: -len(block.layers)]
+            else:
+                res_samples = None
+            x = block(x, res_samples, t, cond)
 
-        for block1, attn, block2 in self.mids:
-            x = block1(x, t)
-            x = attn(x, cond)
-            x = block2(x, t)
-
-        for block1, block2, attn, upsample in self.ups:
-            x = torch.cat((x, shortcut.pop()), dim=1)
-            x = block1(x, t)
-
-            x = torch.cat((x, shortcut.pop()), dim=1)
-            x = block2(x, t)
-            x = attn(x, cond)
-
-            x = upsample(x)
-
-        x = torch.cat((x, r), dim=1)
-        for block, proj in self.head:
-            x = block(x, t)
-            x = proj(x)
+        #x = torch.cat((x, r), dim=1)
+        for block in self.head:
+            x = block(x)
 
         return x
 
     def encode(self,x,time=None,cond=None):
-        # x[b,3,h,w]
+        # x[b,c,h,w]
         # time[b,]
-
-        if self.self_condition:
-            x_self_cond = torch.zeros_like(x)
-            x = torch.cat((x_self_cond, x), dim=1)  #[b,2*3,h,w]
+        # cond[b,c]
 
         x = self.stem(x)  #[b,64,h,w]
-
         t = self.time_mlp(time) if time is not None else None  #[b,256]
 
+        shortcut = (x,)
+        for block in self.downs:
+            x, res = block(x, t, cond)
+            shortcut += res
 
-        for block1, block2, attn, downsample in self.downs:
-            x = block1(x, t)
-            x = block2(x, t)
-            x = attn(x,cond)
-            x = downsample(x)
-
-        for block1, attn, block2 in self.mids:
-            x = block1(x, t)
-            x = attn(x, cond)
-            x = block2(x, t)
-            
-        return x #[b,h/8,w/8,512]
-  
-    def decode(self, x, time=None, cond=None):
-        assert not self.short_cuts, f"unet short cuts not supported in decode-only process"
-        t = self.time_mlp(time) if time is not None else None  #[b,256]
-        for block1, block2, attn, upsample in self.ups:
-            x = block1(x, t)
-            x = block2(x, t)
-            x = attn(x, cond)
-
-            x = upsample(x)
-
-        for block, proj in self.head:
-            x = block(x, t)
-            x = proj(x)
+        for block in self.mids:
+            x = block(x, t, cond)
 
         return x
-            
-    def classify_forward(self, x):
-        x = self.forward(x)
-        for flat, ln1, ln2 in self.classifier:
-            x = ln2(ln1(flat(x)))
+
+    def decode(self,x,time=None,cond=None):
+        t = self.time_mlp(time) if time is not None else None  #[b,256]
+
+        for block in self.mids:
+            x = block(x, t, cond)
+
+        for block in self.ups:
+            x = block(x, None, t, cond)
+
+        for block in self.head:
+            x = block(x)
         return x
 
 
-# ConditionalUNet unit test
-if __name__ == "__main__":
-    import torchvision
-    from torchvision import transforms
-    transform = transforms.Compose([
-        transforms.Pad(4),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomCrop(32),
-        transforms.ToTensor(),
-    ])
-
-    train_dataset = torchvision.datasets.CIFAR10(root='./data/cifar',
-                                                 train=True,
-                                                 transform=transform,
-                                                 download=False)
-
-    # 测试数据集
-    test_dataset = torchvision.datasets.CIFAR10(root='./data/cifar',
-                                                train=False,
-                                                transform=transform,
-                                                download=False)
-
-    train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                               batch_size=32,
-                                               shuffle=True)
-    # 测试数据加载器
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                              batch_size=32,
-                                              shuffle=False)
-
-    net = ConditionalUNet(32,
-                          32,
-                          3,
-                          base_channel=64,
-                          output_channel=10,
-                          self_condition=False).cuda()
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-
-    total_step = len(train_loader)
-    num_epochs = 60
-    for epoch in range(num_epochs):
-        for i, (images, labels) in enumerate(train_loader):
-            images = images.cuda()
-            labels = labels.cuda()
-            outputs = net.classify_forward(images)
-            loss = criterion(outputs, labels)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()  
-        print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(
-                    epoch + 1, num_epochs, i + 1, total_step, loss.item()))
-
-        with torch.no_grad():
-            correct = 0
-            total = 0
-            for images, labels in test_loader:
-                images = images.cuda()
-                labels = labels.cuda()
-                outputs = net.classify_forward(images)
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
-
-            print('Test Accuracy of the model on the test images: {} %'.format(
-                100 * correct / total))
