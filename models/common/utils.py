@@ -5,7 +5,6 @@ import numpy as np
 import torch.nn.functional as F
 import random
 from functools import partial
-import torch.distributed as dist
 
 class DiceLoss(nn.Module):
     def __init__(self, n_classes):
@@ -158,9 +157,9 @@ def get_recon_loss(x, recon_x,):
     recon_loss = torch.sum(recon_loss) / recon_loss.shape[0]
     return recon_loss   
 
-def ddp_load_checkpoint(load_path):
+def ddp_load_checkpoint(load_path, rank):
     init = torch.load(load_path,
-                      map_location='cuda:%d' % dist.get_rank()) #['model']
+                      map_location='cuda:%d' % rank) #['model']
 
     state_dict = {}
     for k, v in init.items():
@@ -187,7 +186,7 @@ def cosine_with_warmup_scheduler(optimizer, num_epochs, batch_size, dataset_size
         if gpus_world_size == 1:
             warmup_iters = 0
         else:
-            warmup_iters = 1000 // gpus_world_size
+            warmup_iters = 100 // gpus_world_size
 
         if k < warmup_iters:
             return (k + 1) / warmup_iters
