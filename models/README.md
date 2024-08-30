@@ -1,14 +1,13 @@
 
-# Diffuser
+# Auto encoder
 ## vae
 variational autoencoder is autoencoder whose encodings distribution is regularised and latent 
 space is explictly represented, continuous and structured, allowing for smooth interpolation. 
 1) encoder produce mean and log variance (variance is always positive, inconsistant with 
    neutral net output) instead of latent features.
 2) re-parameterize uses mean, log variance and N(0,I) sampling as alternative of gaussian 
-   distribution sampling, making the process derivable and latent Z be N(0,1) distribution.
-3) decoder takes Z and decodes(mlp) to feature vectors of same size as input. With sigmoid,
-   normalize to 0~1 for image generation.
+   distribution sampling, making the process derivable and latent Z include N(0,1) distribution.
+3) decoder takes Z to feature vectors of same size as input. 
 4) loss function KL(N(u(Z),var(Z)) || N(0,I)), aims at making the encoder output distribution 
    approaching standard normal distribution.
 	```python
@@ -26,13 +25,37 @@ space is explictly represented, continuous and structured, allowing for smooth i
 
 7) run script
 	```python
-	python models/common/vae.py
+	python models/vae.py
    	#without training, the decoder produces continuous but meanless handwrite figures.
    	#after training, the decoder produces continuous and meanful handwrite figures.
  	```
-<img src="../assets/vae_chaos.png" width="300" /> <img src="../assets/vae_trained.png" width="300" /> 
+    <img src="../assets/vae_chaos.png" width="300" /> <img src="../assets/vae_trained.png" width="300" /> 
 
 
+## vq-vae
+vq-vae actually not related with variational ^_^! Instead, it is a update auto encoder. 
+In auto encoder, it encode image to features then decode back to reconstructed image, however the encoded
+latent space is very limited, thus poor generative capability. vq-vae utilized a embedding table (could be 
+very large) to represent image latents, making the latent space large, trainable, diverse and controllable.
+Since latent space is a embedding table, it is a discrete latents representation method.
+1) encoder stage
+	image[b,c,h,w] to latent feature [b, emb_c, h/f, w/f]
+2) vector quantizer stage
+	- embdding table initialized to e[E, emb_c]
+	- flat latent feature to z[b*h/f*w/f, emb_c]
+	- calculate distance (z - e)**2, which yield dist[b*h/f*w/f, E]
+	- ind=argmin(dist, dim=1), get the nearest embedding row for each z
+	- z_q = e[ind].view(b,emb_c,h/f,w/f). Now z_q is used to represent z
+3) decoder stage
+   decode z_q back to reconstructed image[b,c,h,w]
+
+
+
+
+
+
+
+# Diffuser
 ## ddpm/gaussiandiffusion
 a unsupervised learning and generative modeling iteratively applying a series of diffusion 
 steps to a N(0,I) noise distribution in forward, and starting from a N(0,I) noise sample and 
