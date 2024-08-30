@@ -3,10 +3,10 @@ import torch
 import numpy as np
 import h5py
 from scipy import ndimage
-import torchvision.datasets as datasets
+import datasets
 import pandas as pd
 import cv2
-from datasets import load_dataset
+from datasets import load_dataset, DownloadConfig
 
 from torchvision.datasets import MNIST, CIFAR10, ImageFolder
 
@@ -146,7 +146,10 @@ class ImageNetDataset(Tokenizer):
         self.transform = transform
         #self.dataset = datasets.load_from_disk(rootdir)[mode]
         
-        self.dataset = load_dataset('imagenet-1k', split=mode)
+        if rootdir is None:
+            self.dataset = load_dataset('imagenet-1k', split=mode, download_config=DownloadConfig(resume_download=True))
+        else:
+            self.dataset = datasets.load_from_disk(rootdir) #.select(range(10000))
         self.dataset.set_transform(self.transform_img)
         self.classes = self.dataset.features['label']
 
@@ -164,7 +167,7 @@ class ImageNetDataset(Tokenizer):
 
         image = data['image']
         label = data['label']
-        label_str = self.classes.int2str(label)
+        label_str = self.classes.int2str(label) if label != -1 else 'invalid'
         image_mode = image.mode
 
 
@@ -301,3 +304,49 @@ class CifarDataset(Tokenizer):
         
     def __len__(self):
         return len(self.dataset)
+
+class ButterfliesDataset(Tokenizer):
+    def __init__(self, rootdir, image_size=224, transform=None, mode='train', tokenizer=None, 
+                 max_token_len=512):
+        self.image_size = image_size
+        self.transform = transform
+        #self.dataset = datasets.load_from_disk(rootdir)[mode]
+        
+        self.dataset = load_dataset('huggan/smithsonian_butterflies_subset', split=mode)
+        self.dataset.set_transform(self.transform_img)
+        
+        super().__init__(tokenizer, max_token_len)
+ 
+    def transform_img(self, data):
+        data['image'] = [self.transform(img) for img in data['image']]
+        return data
+        
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        data = self.dataset[idx]
+
+        image = data['image']
+        label = -1
+        label_str = 'invalid'
+        image_mode = image.mode
+
+        if self.image_size != image.shape[1] or self.image_size != image.shape[2]:
+            # image = image.resize((self.image_size, self.image_size)) 
+            raise ValueError("image shape not resized correctly.")    
+                  
+        if image.shape[0]==1: #L
+            image = image.repeat(3,1,1)
+        elif image.shape[0]==4: #RGBA
+            image = image[:3,:,:]
+            
+        # tokenize label text
+        text_id, attention_mask = self.tokenize_text(label_str)    
+            
+        item = {}
+        item['image'] = image.float()
+        item['label'] = label
+        item['text_id'] = text_id
+        item['attention_mask'] = attention_mask
+        return item
