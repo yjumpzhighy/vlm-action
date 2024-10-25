@@ -75,7 +75,7 @@ rag is able to alleviate LLMs hallucination issue, while benefits from data secu
     python rag/advanced_rag_merge_retrievers.py
 
 ## 5. Explore papers
-### masked autoencoders are scalable vision learners
+5.1 masked autoencoders are scalable vision learners
 ![image](https://github.com/user-attachments/assets/26360490-b467-4f13-9a2d-eebd06498c52)
 
 
