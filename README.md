@@ -76,6 +76,7 @@ rag is able to alleviate LLMs hallucination issue, while benefits from data secu
 
 ## 5. Explore papers
 5.1 masked autoencoders are scalable vision learners
+
 ![image](https://github.com/user-attachments/assets/26360490-b467-4f13-9a2d-eebd06498c52)
 
     # 1. encoder
