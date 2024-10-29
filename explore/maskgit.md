@@ -10,6 +10,9 @@ use image tokenizer on image latents, have partial tokens masked and predict the
 - image tokens get partial masked, and feed into Embeding and get tokens embedding
 - token embeddings input into vit, and predict tokens id of each patch
 - get cross entropy loss of on-hot image tokens and predicted tokens
+- parallel decode
+- inpainting
+- class conditional edition
 
 
 
@@ -41,3 +44,7 @@ use image tokenizer on image latents, have partial tokens masked and predict the
       
       #4. loss
       l = ce(logit.reshape(-1, codebook_size + 1), img_token.view(-1))
+
+      #5. decode
+
+  
