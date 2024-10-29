@@ -10,7 +10,9 @@
 ## 2.gpt
    ![image](https://github.com/user-attachments/assets/1ecec3c0-5107-42e2-94e6-1132189ae587)
 
-   gpt based on transformer decoder, but removed cross-attn due to encoder removed.
-   - 
-
+    Gpt based on transformer decoder, but removed cross-attn due to encoder removed.
+    - use ground truth as output embedding in training, and use previsouly generated results as output embedding in reference
+    - lower-triangular-masked self-attention on output embedding, as it only look ahead
+    
 ## 3.bert
+   
