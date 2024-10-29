@@ -4,5 +4,8 @@ sequence Transformer to auto-regressively predict pixels, withoutincorporating k
 
 ![image](https://github.com/user-attachments/assets/90a6c6fb-b5ec-4983-9e46-cf3bc51d87cd)
 
-1) bert and gpt
+1) downsample to 32x32 low resolution image, then flatten to 1-d by rows.
+2) use gpt2 model, to predict next pixel based on generated pixels
+3) use bert model, to predict masked pixels
+4) 
    
