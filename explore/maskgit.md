@@ -1,9 +1,9 @@
-MaskGIT: Masked Generative Image Transformer
+# MaskGIT: Masked Generative Image Transformer
 
 ![image](https://github.com/user-attachments/assets/04723d00-0575-4d59-ac5d-1d4ee4f19b3e)
 
 
-use image tokenizer on image latents, have partial tokens masked and predict the missing tokens.
+Use image tokenizer on image latents, have partial tokens masked and predict the missing tokens.
 - encode raw image pixels into latents of patches
 - use VectorQuantizer(codebook) to find minimul vector distance, each patch would be assigned a codebook index, which
   is image tokens
@@ -55,7 +55,7 @@ use image tokenizer on image latents, have partial tokens masked and predict the
           pred_code = vit(code, labels)    
           f_mask = ... #with unpredicted tokens, select top t patches max confidence token id, keep for next step
           code[f_mask] = pred_code[f_mask]
-        
+      img = VQModel.decode(code) #decode latents to pixels
   
   
 
