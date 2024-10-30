@@ -13,7 +13,8 @@ Use image tokenizer on image latents, have partial tokens masked and predict the
 - iteration decode. to follow the training task, still use predict masked patches method to gradually generate images
   in this way, it is much faster than token-by-token generative
 - inpainting
-- class conditional image manipulation
+- class conditional image manipulation, the bounding box region as the input of initial mask to the
+  iterative decoding algorithm
 
 
 
