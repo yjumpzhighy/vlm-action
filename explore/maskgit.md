@@ -10,7 +10,8 @@ use image tokenizer on image latents, have partial tokens masked and predict the
 - image tokens get partial masked, and feed into Embeding and get tokens embedding
 - token embeddings input into vit, and predict tokens id of each patch
 - get cross entropy loss of on-hot image tokens and predicted tokens
-- parallel decode
+- iteration decode. to follow the training task, still use predict masked patches method to gradually generate images
+  in this way, it is much faster than token-by-token generative
 - inpainting
 - class conditional edition
 
@@ -32,12 +33,10 @@ use image tokenizer on image latents, have partial tokens masked and predict the
       #concat visual tokens and class tokens
       #+1 for the mask of the viz token, +1 for mask of the class
       E = Embedding(codebook_size+1+nclass+1, C)  #init
-  
-      cls_token = y.view(b, -1) + codebook_size + 1 #y is classification gt, shift the class token by the amount of codebook
+      cls_token = labels.view(b, -1) + codebook_size + 1 #labels is classification gt, shift the class token by the amount of codebook
       input = torch.cat([img_token.view(img_token.size(0), -1), cls_token.view(img_token.size(0), -1)], -1)   # [b, h*w+1]
       token_emb = E(input) #[b, h*w+1, C]
       pos_emb = trunc_normal_(Parameter(zeros(1, h*w+1, C)), 0., 0.02) #use trainable parameters as pos embeding
-      
       x = token_emb + pos_emb #[b, h*w+1, C]
       x = vit(x) #[b, h*w+1, C]
       logit = matmul(x, token_emb.weight.T)[:, :h*w, :codebook_size + 1] #[b, h*w, codebook_size + 1]
@@ -45,6 +44,19 @@ use image tokenizer on image latents, have partial tokens masked and predict the
       #4. loss
       l = ce(logit.reshape(-1, codebook_size + 1), img_token.view(-1))
 
-      #5. decode
+      #5. decode/sampling
+      code = full((b, h, w), -1)
+      labels = [...] #intend generated class with size b
+      mask = ones(b, h*w)
+      steps = 12  #total steps in generation process
+      sche = (1 - linspace(1, 0, step)) * h*w  #valid patch tokens number after mask applied in each step
+      sche[sche == 0] = 1   #in first step, at least predict one token. and last step predict h*w tokens
+      for indice, t in enumerate(sche):
+          pred_code = vit(code, labels)    
+          f_mask = ... #with unpredicted tokens, select top t patches max confidence token id, keep for next step
+          code[f_mask] = pred_code[f_mask]
+        
+  
+  
 
   
