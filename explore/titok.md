@@ -1,7 +1,12 @@
 # An Image is Worth 32 Tokens for Reconstruction and Generation
 ![image](https://github.com/user-attachments/assets/c3ced2f4-69f3-445b-8f2c-8a306025fe51)
 
-2D tokenizations have inherent redundancies present in images, where adjacent regions frequently display similarities
+Tokenizes images into 1D latent sequences:
+- 2D tokenizations (like maskgit) have inherent redundancies. e.g, one patch may fall into two similar token ids in codebook
+- set 1D latent embeddings as tokenzer. after concat with image patches embeddings, feedinto vit. In this way,
+  the latent embeddings would learn the representation of image patches.
+- Use the latent embeddings into codebook, to get tokens and tokens id.
+- the tokens would be feedinto vit, and predict tokens id.
 
 
     #1. encode
