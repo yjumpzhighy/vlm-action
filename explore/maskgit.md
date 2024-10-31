@@ -54,13 +54,13 @@ Use image tokenizer on image latents, have partial tokens masked and predict the
       sche = (1 - linspace(1, 0, step)) * h*w  #valid patch tokens number after mask applied in each step
       sche[sche == 0] = 1   #in first step, at least predict one token. and last step predict h*w tokens
       for indice, t in enumerate(sche):
-          pred = vit(code, labels)
+          logits = vit(code, labels) #[b, h*w, codebook_size + 1]
           prob = softmax(pred)
-          pred_code = categoricalsample(prob)  #[b,h,w], prob sampling from pred, not the argmax from pred
+          pred_code = categoricalsample(prob)  #[b,h,w] with value range(0~codebook_size), prob sampling from pred, not the argmax from pred
           f_mask = mask * topk(prob) #with unpredicted tokens, select top t patches with sampling confidence token id, to update
           code[f_mask] = pred_code[f_mask]
           mask[topk_indices] = 0  #predicted patches marked and won't updated 
-      img = VQModel.decode(code) #decode latents to pixels
+      img = VQModel.decode(code) #decode tokens in codebook entry to latents first, then decode latents to pixels
   
   
 ![image](https://github.com/user-attachments/assets/e0801914-87e7-412a-9506-3d7d56cde517)
