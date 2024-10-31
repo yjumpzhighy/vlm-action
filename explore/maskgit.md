@@ -64,5 +64,6 @@ Use image tokenizer on image latents, have partial tokens masked and predict the
   
   
 ![image](https://github.com/user-attachments/assets/e0801914-87e7-412a-9506-3d7d56cde517)
+
 in each step, only a partial patches get predicted. note with predicted patches, it won't be updated anymore.
   
