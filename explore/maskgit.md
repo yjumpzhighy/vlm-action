@@ -4,7 +4,7 @@
 
 
 Use image tokenizer on image latents, have partial tokens masked and predict the missing tokens.
-- encode raw image pixels into latents of patches
+- vq encode raw image pixels into latents of patches
 - use VectorQuantizer(codebook) to find minimul vector distance, each patch would be assigned a codebook index, which
   is image tokens
 - image tokens get partial masked, and feed into Embeding and get tokens embedding
@@ -12,8 +12,9 @@ Use image tokenizer on image latents, have partial tokens masked and predict the
 - get cross entropy loss of on-hot image tokens and predicted tokens
 - iteration decode. to follow the training task, still use predict masked patches method to gradually generate images
   in this way, it is much faster than token-by-token generative
-- inpainting
-- class conditional image manipulation, the bounding box region as the input of initial mask to the
+- kind of like 2 stages operation model (similar with ldm). it actually operates with token ids, but use pretrianed vq model
+  to encode and decode with pixels
+- inpainting / class conditional image manipulation, the bounding box region as the input of initial mask to the
   iterative decoding algorithm
 
 
