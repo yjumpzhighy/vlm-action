@@ -5,8 +5,11 @@ Tokenizes images into 1D latent sequences:
 - 2D tokenizations (like maskgit) have inherent redundancies. e.g, one patch may fall into two similar token ids in codebook
 - set 1D latent embeddings as tokenzer. after concat with image patches embeddings, feedinto vit. In this way,
   the latent embeddings would learn the representation of image patches.
-- Use the latent embeddings into codebook, to get tokens and tokens id.
-- the tokens would be feedinto vit, and predict tokens id.
+- Use the latent embeddings into vector quantizer codebook, to get patchs tokens embedding and tokens id.
+- Concate mask tokens embedding with patchs tokens embedding and feedinto vit. In this way, the mask embeddings would be used
+  as the representtion of patches, which then decode to a image directly.
+- No pretrained vae needed, it uses regular encoder and decoder structure
+  
 
 
       #1. encode
@@ -45,4 +48,6 @@ Tokenizes images into 1D latent sequences:
       z = Conv2d(C,h*w*3,kernel=1)(z).rearrange(..) #[b,3,H,W]
     
     
-    
+
+  2 stages training:
+  - stage 1:
