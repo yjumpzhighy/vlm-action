@@ -46,8 +46,10 @@ Tokenizes images into 1D latent sequences:
       #4. reconstruct
       z = z.reshape(..) #[b,C,h,w]
       z = Conv2d(C,h*w*3,kernel=1)(z).rearrange(..) #[b,3,H,W]
-    
+
+      #5. training
+      #5.1 stage 1
+      tokenizer = pretrained
+      
     
 
-  2 stages training:
-  - stage 1:
