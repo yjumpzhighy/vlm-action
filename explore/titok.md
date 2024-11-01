@@ -18,7 +18,7 @@ Tokenizes images into 1D latent sequences:
       latent_tokens = Parameter(128, C) #init, 128 tokens tokenizer
       latent_pos_embedding_encode = Parameter(128, C) #init
       
-      x = Conv2d(kernel=patch_size).reshape  #[b,3,H,W] -> [b,h*w,C]
+      x = Conv2d(kernel=patch_size)(img).reshape  #[b,3,H,W] -> [b,h*w,C]
       x = concat(x, class_embedding_encode) + pos_embedding_encode #[b, h*w+1, C]
       x_latent = latent_tokens + latent_pos_embedding_encode
       x = concat(x, x_latent) #[b, h*w+1+128, C]
@@ -45,11 +45,16 @@ Tokenizes images into 1D latent sequences:
   
       #4. reconstruct
       z = z.reshape(..) #[b,C,h,w]
-      z = Conv2d(C,h*w*3,kernel=1)(z).rearrange(..) #[b,3,H,W]
+      # reconstruction = Conv2d(C,h*w*3,kernel=1)(z).rearrange(..) #[b,3,H,W], direclty predict pixels
+      reconstruction = Conv2d(C,1024)(z) #[b,1024,h,w]
 
       #5. training
-      #5.1 stage 1
-      tokenizer = pretrained
+      #5.1 stage 1, focus on encoder training and 1D-128 latent tokens learning image representation. Use pretrained maskgit
+      #with vqgan as teacher, to avoid train gan and other complex loss functions.
+      proxy_codes = MaskGit.encoder(img) #[b,h,w], used maskgit encoder, returns patches token codebook indices
+      loss = crossentropyloss(reconstruction.reshape(b,1024,-1), proxy_codes.reshape(b,-1))
+      #5.2 stage 2, finetune decoder only.
+  
       
     
 
