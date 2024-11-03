@@ -53,7 +53,18 @@ Tokenizes images into 1D latent sequences:
       #with vqgan as teacher, to avoid train gan and other complex loss functions.
       proxy_codes = MaskGit.encoder(img) #[b,h,w], used maskgit encoder, returns patches token codebook indices
       loss = crossentropyloss(reconstruction.reshape(b,1024,-1), proxy_codes.reshape(b,-1))
-      #5.2 stage 2, finetune decoder only.
+      #5.2 stage 2, focus on finetune decoder with gan.
+      loss = mse_loss(img, reconstructions)
+      perceptual_loss = PerceptualLoss(img, reconstructions)
+      NLayerDiscriminator().require_grad = false  # disable discriminator during use generator
+      generator_loss = NLayerDiscriminator(reconstructions)
+      backward(loss+perceptual_loss+generator_loss)
+
+      NLayerDiscriminator().require_grad = true  # enable discriminator during training discriminator
+      real = NLayerDiscriminator(img)
+      fake = NLayerDiscriminator(reconstructions)
+      discriminator_loss = hinge_d_loss(real, fake)
+      backward(discriminator_lossl)
   
       
     
