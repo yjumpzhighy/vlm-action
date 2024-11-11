@@ -4,6 +4,7 @@
 
 ## gather-gemm-scatter strategy:
 <img src="https://github.com/user-attachments/assets/81ab120c-01cb-4f48-b95b-2b0346c67982" width="300" />  <img src="https://github.com/user-attachments/assets/d7f20316-d341-4ba6-8389-907862db137a" width="300" />
+
 The pipeline would be proceed as:
 1) gather input features based on input-output map for each cell weight
 2) perform GEMM between input features and kernel weights
@@ -18,3 +19,7 @@ The v2 pipeline would be proceed as:
 
 ## implicit gemm
 <img src="https://github.com/user-attachments/assets/c64d28ff-40a6-4622-a271-a149205056f5" width="300" />
+
+Instead of explicitly writing gathered input features into DRAM , we load tiles of input features into the on-chip
+SRAM on the fly. Indices in input features are mapped to locations in the input feature map according to neighborhood
+relationships.
