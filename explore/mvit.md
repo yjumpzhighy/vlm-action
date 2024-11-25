@@ -5,7 +5,9 @@
 1. MHA -> MHPA, with pooling added
 Compared to MHA, it performed 1) pooling on q,k,v with channel mixing 2) residual skip x+q
 
-        # after patch embed, input x[b,l,c], l==h*w, h==H/p, w==W/p
+        # after patch embed, input x[b,l,c], l==h*w, h==H/p/s,
+        # w==W/p/s(s downsample stride)
+   
         q,k,v = Linear(c,3c')(x).reshape(b,l,3,heads,c'//head).permute(2,0,3,1,4).chunk(3)
         # q pooling
         q_pool = Conv2d(c'//head,c'//head,kernel=(1,1))
