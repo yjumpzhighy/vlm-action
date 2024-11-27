@@ -33,7 +33,11 @@ Thus, two patches interaction would change depending on their absolute position 
     #                   [...,   ..., ..., ., .]
     #                   [2(w-1),2w-1,..., ., w-1]]
     dist_w = (arange(wq)[:, None] - arange(wk)[None, :] + (wk-1)
-
+    # what does 2(w-1) mean here? 
+    # for two patches i and j, their w bias ranges [-(w-1),(w-1)]. after
+    # offset to non-negative, it ranges [0, 2(w-1)]
+    
+        
     rel_pos_h = Parameter(zeros(2*max(wq,wk)-1, head_dim)) #[2w-1,head_dim]
     rel_pos_w = Parameter(zeros(2*max(wq,wk)-1, head_dim)) #[2w-1,head_dim]
     
