@@ -15,7 +15,8 @@ patches (in a sequence), rather than their relative spatial relationships, which
 ingores shift-invariance principle in vision. (BTW, CNN uses pooling and kernel 
 inherently provide translation invariance, since it is relative, not absolute pos).
 
-Thus, two patches interaction would change depending on their absolute position in images even if their relative positions stay unchanged.
+Thus, two patches interaction would change depending on their absolute position in images even if their relative positions stay unchanged. For efficiency, decompose the relative to 
+learnable x bias and y bias and combine finally.
 
     # pooled q,k,v = [b,head,l,head_dim],where head_dim=c/head, l==h*w,
     #  h==H/p/s, w==W/p/s (s downsample stride)
