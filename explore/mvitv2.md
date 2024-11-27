@@ -52,6 +52,9 @@ Thus, two patches interaction would change depending on their absolute position 
         + rel_w[:, :, :, :, None, :]).view(b,head,l,l)
 
 
-    # residual
+
+
+### 2.q residual
+    x = attn.softmax(dim=-1) @ v [b,head,l,c'/head]
     x = (x + q).rearrage(b,l,c')
     
