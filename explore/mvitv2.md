@@ -50,6 +50,8 @@ Thus, two patches interaction would change depending on their absolute position 
     attn = (attn.view(b,head,h,w,h,w)
         + rel_h[:, :, :, :, :, None]
         + rel_w[:, :, :, :, None, :]).view(b,head,l,l)
-    
 
+
+    # residual
+    x = (x + q).rearrage(b,l,c')
     
