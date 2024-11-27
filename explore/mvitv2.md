@@ -17,8 +17,8 @@ inherently provide translation invariance, since it is relative, not absolute po
 
 Thus, two patches interaction would change depending on their absolute position in images even if their relative positions stay unchanged.
 
-    # pooled q,k,v = [b,head,l,c'/head],where l==h*w, h==H/p/s,
-    # w==W/p/s (s downsample stride)
+    # pooled q,k,v = [b,head,l,head_dim],where head_dim=c/head, l==h*w,
+    #  h==H/p/s, w==W/p/s (s downsample stride)
     attn = q @ k' #[b,head,l,l]
     hq,hk = h
     wq,wk = w
@@ -28,14 +28,24 @@ Thus, two patches interaction would change depending on their absolute position 
     #                   [...,   ..., ..., ., .]
     #                   [2(h-1),2h-1,..., ., h-1]]
     dist_h = (arange(hq)[:, None] - arange(hk)[None, :] + (hk-1) 
-    dist_w = (arange(wq)[:, None] - arange(wk)[None, :] + (wk-1) #[w,w]
+    #[w,w], with value [[w-1,   w-2, ..., 1, 0]
+    #                   [w,     w-1, ..., 2, 1]
+    #                   [...,   ..., ..., ., .]
+    #                   [2(w-1),2w-1,..., ., w-1]]
+    dist_w = (arange(wq)[:, None] - arange(wk)[None, :] + (wk-1)
 
-    rel_pos_h = Parameter(zeros(2*max(wq,wk)-1, c'/head)) #[2w-1,head_dim]
-    rel_pos_w = Parameter(zeros(2*max(wq,wk)-1, c'/head)) #[2w-1,head_dim]
+    rel_pos_h = Parameter(zeros(2*max(wq,wk)-1, head_dim)) #[2w-1,head_dim]
+    rel_pos_w = Parameter(zeros(2*max(wq,wk)-1, head_dim)) #[2w-1,head_dim]
     
     Rh = rel_pos_h[dist_h.long()] #[h,h,head_dim]
-    Rw = rel_pos_w[dist_w.long()] #[w,w,head_dim]
+    Rw = rel_pos_w[dist_w.long()] #[w,w,head_dim] 
+    Rq = q.reshape(b, head, hq, wq, head_dim) #[b,head,h,w,head_dim]
+    rel_h = Rq @ Rh'  #[b,head,h,w,h]
+    rel_w = Rq @ Rw'  #[b,head,h,w,w]
 
+    attn = (attn.view(b,head,h,w,h,w)
+        + rel_h[:, :, :, :, :, None]
+        + rel_w[:, :, :, :, None, :]).view(b,head,l,l)
     
 
     
