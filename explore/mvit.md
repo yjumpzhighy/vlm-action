@@ -26,11 +26,6 @@ Compared to MHA, it performed 1) pooling on q,k,v with channel mixing 2) residua
         v = v.rearrange(b,head,h*w,c'/head) #[b,head,l,c'/head]
     
         attn = q @ k'
-
-        # rel pos spatial
-        attn = cal_rel_pos_spatial(..)
-   
         x = attn.softmax(dim=-1) @ v [b,head,l,c'/head]
-   
-        # residual
-        x = (x + q).rearrage(b,l,c')
+        x = x.rearrage(b,l,c')
+        
