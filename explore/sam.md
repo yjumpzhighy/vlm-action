@@ -134,4 +134,4 @@
     out = stack(out, dim=1) #[B,4,embed_dim/8]
     masks = (out @ upscaled_embed.view(B,embed_dim/8,H/4*W/4)) #[B,4,H/4*W/4]
     masks = masks.view(..) #[B,4,H/4,W/4]
-            
+    masks = F.interpolate(masks, (H,W)) #[B,4,H,W]
