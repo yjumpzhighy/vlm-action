@@ -133,5 +133,5 @@
     out = [mlps[i](mask_tokens_out[:,i,:]) for i in range(num_mask_tokens))]
     out = stack(out, dim=1) #[B,4,embed_dim/8]
     masks = (out @ upscaled_embed.view(B,embed_dim/8,H/4*W/4)) #[B,4,H/4*W/4]
-    masks = masks.view(..) #[B,4,H/4,W/4]
-    masks = F.interpolate(masks, (H,W)) #[B,4,H,W]
+    masks = masks.view(..)[:,1:,:,:] #[B,3,H/4,W/4], takes only 3 as multi-masks
+    masks = F.interpolate(masks, (H,W)) #[B,3,H,W]
