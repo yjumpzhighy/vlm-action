@@ -82,7 +82,7 @@
     image_embed = image_embed + dense_prompt_embed  #[B,embed_dim,H/16,W/16]
     image_embed_pe =repeat_interleave(image_embed_pe,B,dim=0)  #[B,embed_dim,H/16,W/16]
 
-    # q[B,6+n,embed_dim], k[B,H/16*W/16,embed_dim]
+    # promptF[B,6+n,embed_dim], imageF[B,H/16*W/16,embed_dim]
     promptF,imageF=TwoWayTransformer(image_embedd, image_embed_pe, prompt_embed):
         image_embed = image_embed.flatten(2).permute(0, 2, 1) #[B,H/16*W/16,embed_dim]
         image_embed_pe=image_embed_pe.flatten(2).permute(0,2,1)#[B,H/16*W/16,embed_dim]
