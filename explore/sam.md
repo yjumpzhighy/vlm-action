@@ -136,10 +136,11 @@
     masks = masks.view(..)[:,1:,:,:] #[B,3,H/4,W/4], takes only 3 as multi-masks
     masks = F.interpolate(masks, (H,W)) #[B,3,H,W]
 
+
 2. Inference
 
-    #predict
-    ##prompt encoding
+    #prompt encoding
+    input_points
    
     
     
