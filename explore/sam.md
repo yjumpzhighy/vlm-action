@@ -139,8 +139,8 @@
 
 2. Inference
 
-    #prompt encoding
-    input_points
+    #1. Image encoder
+    x = Conv2d(kernel_size=16, stride=16)(img)
    
     
     
