@@ -2,7 +2,7 @@
 
 ![image](https://github.com/user-attachments/assets/c8924a90-157f-459c-873f-570a99a1ec32)
 
-
+1.Train
 
     #1. Image encoder
     x = Conv2d(kernel_size=16, stride=16)(img)  #embedding to patches [B,H/16,W/16,C]
@@ -135,3 +135,8 @@
     masks = (out @ upscaled_embed.view(B,embed_dim/8,H/4*W/4)) #[B,4,H/4*W/4]
     masks = masks.view(..)[:,1:,:,:] #[B,3,H/4,W/4], takes only 3 as multi-masks
     masks = F.interpolate(masks, (H,W)) #[B,3,H,W]
+
+2. Inference
+
+    #predict
+
