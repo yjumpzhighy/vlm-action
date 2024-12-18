@@ -139,4 +139,8 @@
 2. Inference
 
     #predict
+    ##prompt encoding
+   
+    
+    
 
