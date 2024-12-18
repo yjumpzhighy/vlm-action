@@ -137,9 +137,9 @@
     masks = F.interpolate(masks, (H,W)) #[B,3,H,W]
 
 
-2. Inference
+2. Inference 
 
-    #1. Image encoder
+    #Image encoder
     x = Conv2d(kernel_size=16, stride=16)(img)
    
     
