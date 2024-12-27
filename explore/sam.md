@@ -144,11 +144,33 @@
 
 2.Points sampling
 
-    #gt_masks [B*3,1,H,W]
+    #gt_masks[B*3,1,H,W] each image has 3 masks, num_pt=1
     pred_masks = zeros(B*3,1,H,W)
+    
     #false positive region, a new point sampled in this region should have
     #negative label to correct the FP error
-    fp_masks = ~gt_masks & pred_masks
+    fp_masks = ~gt_masks & pred_masks #[B*3,1,H,W]
+
+    #false negative region, a new point sampled in this region should have
+    #positive label to correct the FN error
+    fn_masks = gt_masks & ~pred_masks #[B*3,1,H,W]
+
+    #whether the prediction completely match the ground-truth on each mask
+    all_correct = (gt_masks == pred_masks).flatten(2) #[B*3, 1, H*W]
+    all_correct = torch.all(all_correct, dim=2) #[B*3,1]
+    all_correct = all_correct[..., None, None] #[B*3,1,1,1]
+
+    #channel 0 is FP map, while channel 1 is FN map. In case the predictions are all 
+    #correct (no FP or FN), sample a negative point from the background region
+    pts_noise = rand(B*3, num_pt, H, W, 2)
+    pts_noise[..., 0] *= fp_masks | (all_correct & ~gt_masks)
+    pts_noise[..., 1] *= fn_masks
+    pts_idx = pts_noise.flatten(2).argmax(dim=2) #(B*3,num_pt)
+    labels = (pts_idx % 2) #(B*3, num_pt)
+    pts_idx = pts_idx // 2 #(B*3, num_pt)
+    pts_x = pts_idx % W
+    pts_y = pts_idx // W
+    points = stack([pts_x, pts_y], dim=2)  #(B*3, num_pt, 2)
 
     
    
