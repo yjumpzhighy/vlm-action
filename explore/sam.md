@@ -28,6 +28,10 @@
     point_embeddings = [Embedding(1, embed_dim),Embedding(1, embed_dim),
                         Embedding(1, embed_dim),Embedding(1, embed_dim)]
     pos_embed_gaussian_matrix = randn(2, embed_dim/2)
+    ## 2.0 sample points (sample from gt masks for example)
+    see next part details
+
+    
 
     ## 2.1 encode points 
     # points[B,2,2], format like [[[x, y],[0,0]]] unnormalized within [1024,1024]
@@ -137,10 +141,16 @@
     masks = F.interpolate(masks, (H,W)) #[B,3,H,W]
 
 
-2. Inference 
 
-    #Image encoder
-    x = Conv2d(kernel_size=16, stride=16)(img)
+2. Points sampling
+
+       #gt_masks [B*3,1,H,W]
+       pred_masks = zeros(B*3,1,H,W)
+       #false positive region, a new point sampled in this region should have
+       #negative label to correct the FP error
+       fp_masks = ~gt_masks & pred_masks
+
+    
    
     
     
