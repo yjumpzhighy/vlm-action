@@ -142,13 +142,13 @@
 
 
 
-2. Points sampling
+2.Points sampling
 
-       #gt_masks [B*3,1,H,W]
-       pred_masks = zeros(B*3,1,H,W)
-       #false positive region, a new point sampled in this region should have
-       #negative label to correct the FP error
-       fp_masks = ~gt_masks & pred_masks
+    #gt_masks [B*3,1,H,W]
+    pred_masks = zeros(B*3,1,H,W)
+    #false positive region, a new point sampled in this region should have
+    #negative label to correct the FP error
+    fp_masks = ~gt_masks & pred_masks
 
     
    
