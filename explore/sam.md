@@ -30,24 +30,21 @@
     pos_embed_gaussian_matrix = randn(2, embed_dim/2)
     ## 2.0 sample points (sample from gt masks for example)
     see next part details
-
     
 
     ## 2.1 encode points 
-    # points[B,2,2], format like [[[x, y],[0,0]]] unnormalized within [1024,1024]
-    # cls is the number of labels, each label include 1 point
-    # labels[B,2], format like [[1,-1]]
+    # points[B,num_pts,2], format like [[[x, y],..,[x,y],[0,0]]] unnormalized within [1024,1024]
+    # labels[B,num_pts], format like [[1,-1]],indicating which points are valid (some points may padded)
     points = (points + 0.5) / 1024  # Shift to center of pixel and normalize to [0,1]
     points = points * 2 - 1 # Shift to [-1,1]
-    points_embed = points @ pos_embed_gaussian_matrix #[B,2,embed_dim/2]
+    points_embed = points @ pos_embed_gaussian_matrix #[B,num_pts,embed_dim/2]
     points_embed = cat([sin(2*pi*points_embed), cos(2*pi*points_embed)],
-                       dim=-1) #[B,2,embed_dim]
-    points_embed[labels==-1] = 0.0 #reset padding point to zero
-    points_embed[labels==1] += point_embeddings[1] #[B,2,embed_dim]
+                       dim=-1) #[B,num_pts,embed_dim]
+    points_embed[labels==-1] = 0.0 #reset padding point to zero #[B,num_pts,embed_dim]
+
     
     ## 2.2 encode box
     # box[B,2,2], format like [[[x, y],[x',y']]] unnormalized within [1024,1024]
-    # cls is the number of labels
     box = (box + 0.5) / 1024  # Shift to center of pixel and normalize to [0,1]
     box = box * 2 - 1 # Shift to [-1,1]
     box_embed = box @ pos_embed_gaussian_matrix #[B,2,embed_dim/2]
@@ -57,11 +54,10 @@
     box_embed[:,1,:] += point_embeddings[3] #[B,2,embed_dim]
 
     ## 2.3 encode mask
+    dense_prompt_embed =     #[B,embed_dim,H/16,W/16]
 
-    #[B,n,embed_dim], where where n=0,2,4, depends on points/box/mask avaliablity
+    #[B,n,embed_dim], where where n depends on points/box/mask avaliablity
     sparse_prompt_embed = cat([points_embed, box_embed], dim=1) 
-    #[B,embed_dim,H/16,W/16]
-    dense_prompt_embed =     #
 
     # 3. Mask decoder
     #sparse_prompt_embed: [B,n,embed_dim], n=0/2/4
