@@ -20,5 +20,6 @@ integrates a Gaussian function to soften the loss behavior near the class bounda
 
 loss(pt) = -α * (1-pt)^r * exp(-(pt-0.5)^2 / 2 / σ^2) * log(pt) 
 
+pt: usually from sigmoid
 exp(): emphasizes the importance of pt near 0.5 and reduces the effect of extreme values (very close to 0 or 1).  
 σ: controlling the width of the Gaussian function. 
