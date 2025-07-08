@@ -9,6 +9,7 @@ On contrast, the deformable convolution would shift the kernel's each point a li
 Overall deformable-conv process:
 
 <img src="https://github.com/user-attachments/assets/7a3ed141-0883-46d0-a8b5-f4aa67136c93" width="300" height="300">
+
 1) input (B,H,W,C)
 2) conv on input feats, get xy shift (B,H,W,N*2), N is the kernel volume size, like 3*3
 3) on input feats's each channel, apply the same shift. At each channel's each location, it get
@@ -38,11 +39,8 @@ Instead, on each directions, only focus on 4 points to gather most important inf
        d. weights * values, and sum to [1,C/8]
        e. all heads feats concat to [1,C]
 
-## 2.2 multi scale
-
-      
-   
 
 
 ## 2.2 multi scales
+<img src="https://github.com/user-attachments/assets/2835815d-d885-4c2e-946d-805239559fab" width="300" height="300">
 
