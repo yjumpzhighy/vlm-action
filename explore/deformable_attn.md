@@ -17,12 +17,12 @@ Overall deformable-conv process:
 
 
 # 2. Deformable attention  
-<img src="https://github.com/user-attachments/assets/6d66cfce-0cd2-41fb-a84e-bc67c55dafa6" width="300" height="300">  
+<img src="https://github.com/user-attachments/assets/6d66cfce-0cd2-41fb-a84e-bc67c55dafa6" width="300" height="300">       
 Each token not necessary to get attention with all tokens, as most of them are actually unrelated.  
 Instead, on each directions, only focus on 4 points to gather most important info.  
 
 ## 2.1 single scale  
-<img src="https://github.com/user-attachments/assets/87281018-b892-45f8-a398-8e45b2c91bea" width="300" height="300">  
+<img src="https://github.com/user-attachments/assets/87281018-b892-45f8-a398-8e45b2c91bea" width="300" height="300">     
 
 1) input tokens [C,h,w], flatten to [h*w,C]. each token refers to a location in backbone output feats map.   
 2) for each token:   
