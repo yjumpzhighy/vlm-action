@@ -5,10 +5,10 @@
 Compared to classic convolution, which the conv kernel usually with fixed shape, like 3x3 or 7x7.     
 On contrast, the deformable convolution would shift the kernel's each point a little bit on x&y.      
 
-Overall deformable-conv process:  
-
+ 
 <img src="https://github.com/user-attachments/assets/7a3ed141-0883-46d0-a8b5-f4aa67136c93" width="300" height="300">  
 
+Overall deformable-conv process: 
 1) input (B,H,W,C)     
 2) conv on input feats, get xy shift (B,H,W,N*2), N is the kernel volume size, like 3*3      
 3) on input feats's each channel, apply the same shift. At each channel's each location, it get     
