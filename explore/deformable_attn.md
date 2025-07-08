@@ -41,3 +41,20 @@ Instead, on each directions, only focus on 4 points to gather most important inf
 ## 2.2 multi scales  
 <img src="https://github.com/user-attachments/assets/2835815d-d885-4c2e-946d-805239559fab" width="300" height="300">  
 
+1) backbone generate multi-scales feats maps. the "level pos learnable encoding" is used to represent current token on which feas map.  
+   assume 4 feats map here:[C,h1,w1],[C,h2,w2],[C,h3,w3],[C,h4,w4]  
+2) for each feats map:  
+       for each token:  
+          a. each head [1,C/8] generate attn weights [1,4,4], corresponds to 4 maps, 4 offsets points. softmax and sum to 1.0  
+          b. with this token's location on this feats map, find the correspoinding locations on other feats map.
+          c. each head [1,C/8] also generate offest on 4 feats maps [1,4,4*2].  
+          d. combined the offsets and center locations from b&c, use bilinear-interpolation to get values from corresponding input  
+             feats map, get [1,4,4,C] and project to [1,4,4,C/8]  
+          e. weights*values, and sum to [1,C/8]  
+          f. all heads feats concat to [1,C]  
+
+   
+
+   
+              
+              
