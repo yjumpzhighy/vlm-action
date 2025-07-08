@@ -29,12 +29,12 @@ Instead, on each directions, only focus on 4 points to gather most important inf
 
 1) input tokens [C,h,w], flatten to [h*w,C]. each token refers to a location in backbone output feats map.   
 2) for each token:   
-       a. [1,C] split to 8 heads, each head feat [1,C/8], 8 indicates surrounding 8 directions.      
-       b. each head feat generate offest [1,4*2] on 8 directions, which presents 4 locations xy offset on input tokens.     
-          with bilinear-interpolation, get values from input tokens and project to [1,4,C/8]    
-       c. each head feat generate learn attn weights [1,4]    
-       d. weights * values, and sum to [1,C/8]    
-       e. all heads feats concat to [1,C]    
+   - a. [1,C] split to 8 heads, each head feat [1,C/8], 8 indicates surrounding 8 directions.      
+   - b. each head feat generate offest [1,4*2] on 8 directions, which presents 4 locations xy offset on input tokens.     
+   * with bilinear-interpolation, get values from input tokens and project to [1,4,C/8]    
+   - c. each head feat generate learn attn weights [1,4]    
+   - d. weights * values, and sum to [1,C/8]    
+   - e. all heads feats concat to [1,C]    
 
 
 
