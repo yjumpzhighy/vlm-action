@@ -2,7 +2,7 @@
 # 1. Deformable convolution
 Compared to classic convolution, which the conv kernel usually with fixed shape, like 3x3 or 7x7. 
 On contrast, the deformable convolution would shift the kernel's each point a little bit on x&y.
-![image](https://github.com/user-attachments/assets/bebd41e0-82d9-4190-8c25-caf80028e511)
+<img src="https://github.com/user-attachments/assets/bebd41e0-82d9-4190-8c25-caf80028e511" width="600" height="440">
 
 Overall deformable-conv process:
 ![image](https://github.com/user-attachments/assets/7a3ed141-0883-46d0-a8b5-f4aa67136c93)
