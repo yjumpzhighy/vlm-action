@@ -1,6 +1,7 @@
 
 # 1. Deformable convolution  
 <img src="https://github.com/user-attachments/assets/bebd41e0-82d9-4190-8c25-caf80028e511" width="400" height="200">  
+
 Compared to classic convolution, which the conv kernel usually with fixed shape, like 3x3 or 7x7.  
 On contrast, the deformable convolution would shift the kernel's each point a little bit on x&y.  
 
@@ -22,14 +23,15 @@ Instead, on each directions, only focus on 4 points to gather most important inf
 
 ## 2.1 single scale  
 <img src="https://github.com/user-attachments/assets/87281018-b892-45f8-a398-8e45b2c91bea" width="300" height="300">  
-1) input tokens [C,h,w], flatten to [h*w,C]. each token refers to a location in backbone output feats map.  
-2) for each token:  
-       a. [1,C] split to 8 heads, each head feat [1,C/8], 8 indicates surrounding 8 directions.  
-       b. each head feat generate offest [1,4*2] on 8 directions, which presents 4 locations xy offset on input tokens.  
-          with bilinear-interpolation, get values from input tokens and project to [1,4,C/8]  
-       c. each head feat generate learn attn weights [1,4]  
-       d. weights * values, and sum to [1,C/8]  
-       e. all heads feats concat to [1,C]  
+
+1) input tokens [C,h,w], flatten to [h*w,C]. each token refers to a location in backbone output feats map.   
+2) for each token:   
+       a. [1,C] split to 8 heads, each head feat [1,C/8], 8 indicates surrounding 8 directions.      
+       b. each head feat generate offest [1,4*2] on 8 directions, which presents 4 locations xy offset on input tokens.     
+          with bilinear-interpolation, get values from input tokens and project to [1,4,C/8]    
+       c. each head feat generate learn attn weights [1,4]    
+       d. weights * values, and sum to [1,C/8]    
+       e. all heads feats concat to [1,C]    
 
 
 
