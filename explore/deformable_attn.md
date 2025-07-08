@@ -7,6 +7,7 @@ On contrast, the deformable convolution would shift the kernel's each point a li
 
 
 Overall deformable-conv process:
+
 <img src="https://github.com/user-attachments/assets/7a3ed141-0883-46d0-a8b5-f4aa67136c93" width="300" height="300">
 1) input (B,H,W,C)
 2) conv on input feats, get xy shift (B,H,W,N*2), N is the kernel volume size, like 3*3
