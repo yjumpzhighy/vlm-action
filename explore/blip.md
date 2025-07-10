@@ -81,10 +81,11 @@ class ImageGroundedTextDecoder:
 
 ## Captioner-Filter
 <img src="https://github.com/user-attachments/assets/c6ac7c5e-7b15-4cbc-9308-4e9471a4d6b2" width="400" height="600">
-1. MED fintune training on COCO
-2. captioner (based image-grouned text decoder), generate new captions for web images
-3. filter (based image-grounded text encoder), use ITC and ITM to filter-out dismatching captions
-4. new dataset + COCO dataset, retrain the MED.
+
+1. MED fintune training on COCO      
+2. captioner (based image-grouned text decoder), generate new captions for web images        
+3. filter (based image-grounded text encoder), use ITC and ITM to filter-out dismatching captions              
+4. new dataset + COCO dataset, retrain the MED.            
 
 
 ## Inference     
