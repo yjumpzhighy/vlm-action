@@ -68,9 +68,23 @@ class ImageGroundedTextDecoder:
       labels = torch.arange(batchsize)
       ce = cross_entropy(S', labels)
       ```
-3. Image Text Matching Loss      
-   
-4. Language Modeling Loss    
+2. Image Text Matching Loss
+   Unlike the Image-Text Contrastive which focuses on aligning global representations, it determines
+   capture fine-grained alignment whether image and text pair actually matches.
+   a) explicitly constructs negative pairs. from the ITC calculated S map, select texts that incorrectly    
+      predicted as highly similar to that image (but are actually mismatched).
+   b) feedinto binary classifier to predict match/dismatch
+   c) get binary entropy loss
+3. Language Modeling Loss
+   cross-entropy on input text [[Decode],t0,t1,t2..,tn] with prediction [p1,p2,p3,...tn+1]
+
+
+## Captioner-Filter
+<img src="https://github.com/user-attachments/assets/c6ac7c5e-7b15-4cbc-9308-4e9471a4d6b2" width="400" height="600">
+1. MED fintune training on COCO
+2. captioner (based image-grouned text decoder), generate new captions for web images
+3. filter (based image-grounded text encoder), use ITC and ITM to filter-out dismatching captions
+4. new dataset + COCO dataset, retrain the MED.
 
 
 ## Inference     
