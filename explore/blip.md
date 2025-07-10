@@ -13,8 +13,7 @@
    
 5. Image grounded text decoder
 
-'''python
-
+```python
 print("bbc")
+```
 
-'''
