@@ -64,6 +64,6 @@
 # conclude
 1.encoder的每个输入token代表特征图的一个像素点,encoder遍历图中剩余的所有像素点（包括它自己），来学习自己应该特别关注哪些像素点,目的是掌握全局信息. 
   那么decoder的object query同样可以理解为特征图中的某一个像素点，只不过它是随机的,类似于检测框的质心，在训练的过程中，这些随机点不断去学习自己
-  应该关注的部分，然后调整自己的位置。
+  应该关注的部分，然后调整自己的位置。                
 2.each object query doesn't represent a specific object type or instance. Instead, they function more like "detection slots" 
   or "attention patterns" rather than object identities, able detect ANY object through the cross-attention mechanism.
