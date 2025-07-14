@@ -42,9 +42,9 @@
       新, 类似于pre-defined anchors.                               
    b. 第一个self-attention, 和encoder无关, 建模物体和物体之间的关系,找到图像中哪些位置存在物体                              
       q = k = object_queries, v = object_queries. 输出仍为object_queries (b, 100, 256)              
-   c. 第二个cross-attention, 其中k和v来自encoder, q来自decoder自身, 建模图形特征和物体特征之间
+   c. 第二个cross-attention, 其中k和v来自encoder, q来自decoder自身, 建模图形特征和物体特征之间     
       的关系. 即根据object_query不断去从encoder的输出特征中询问(q,k计算相似度) 图像中的物体特征.               
-      q = object_queries, k = src + pos, val = src 输出仍为object_queries(b, 100, 256)              
+      q = object_queries, k = src + pos, val = src 输出仍为object_queries(b, 100, 256)               
    d. 将两次attention得到的object_queries相加作为最终object_queries. 因为第一次代表物体信息缺乏图               
       像特征(class不准),第二次代表图像特征但却物体信息不足(bbox不准)                    
    e. 6个编码器重复上面步骤, 但与encoder不同6个输出都需要记录, 最终得到(6, b, 100, 256)         
@@ -62,6 +62,8 @@
       bbox L1+GIOU,只计算正样本             
 
 # conclude
-encoder的每个输入token代表特征图的一个像素点,encoder遍历图中剩余的所有像素点（包括它自己），来学习自己应该特别关注哪些像素点,目的是掌握全局信息. 
-那么decoder的object query同样可以理解为特征图中的某一个像素点，只不过它是随机的,类似于检测框的质心，在训练的过程中，这些随机点不断去学习自己
-应该关注的部分，然后调整自己的位置。
+1.encoder的每个输入token代表特征图的一个像素点,encoder遍历图中剩余的所有像素点（包括它自己），来学习自己应该特别关注哪些像素点,目的是掌握全局信息. 
+  那么decoder的object query同样可以理解为特征图中的某一个像素点，只不过它是随机的,类似于检测框的质心，在训练的过程中，这些随机点不断去学习自己
+  应该关注的部分，然后调整自己的位置。
+2.each object query doesn't represent a specific object type or instance. Instead, they function more like "detection slots" 
+  or "attention patterns" rather than object identities, able detect ANY object through the cross-attention mechanism.
