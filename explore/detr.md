@@ -11,8 +11,9 @@
    
       <img src="https://github.com/user-attachments/assets/99ccd76a-0c79-49e8-a5e7-7c6cfa87a3c9" width="200" height="300">  
 
-   b. 对x, 第i维(0~127)，偶数sin(x_embed/10000^(2i/128))，奇数cos(x_embed/10000^(2i/128)),          
-      叠加后有pos_x (b,h/32,w/32,128)           
+   b. 对x, 第i维(0~127)，偶数sin(x_embed/10000^(2i/128))，奇数cos(x_embed/10000^(2i/128)),    
+      叠加后有pos_x (b,h/32,w/32,128)
+      
    c. 对y, 第i维(0~127)，偶数sin(y_embed/10000^(2i/128))，奇数cos(y_embed/10000^(2i/128)),             
       叠加后有pos_y (b,h/32,w/32,128)
    
