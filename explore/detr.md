@@ -59,7 +59,34 @@
    c. 计算损失             
       class cross entropy. 上面的情况即正样本(3)+负样本(97)=100, 正样本正常计算, 负样本则强              
       制为背景类             
-      bbox L1+GIOU,只计算正样本             
+      bbox L1+GIOU,只计算正样本
+   ```
+   # pred_batch: [100, classes + 4]
+   # gt_batch: [N_gt, classes + 4]
+   
+   matched_indices = hungarian_matching(pred_batch, gt_batch)
+   # matched_indices: [(query_idx, gt_idx), (query_idx, gt_idx), ...]
+
+   for query_idx, gt_idx in matched_indices:
+      # Classification loss for matched pairs
+      pred_class = pred_batch[query_idx][:num_classes]
+      gt_class = gt_batch[gt_idx][:num_classes]
+      class_loss += cross_entropy_loss(pred_class, gt_class)
+      
+      # Bbox loss for matched pairs (only if not background)
+      if gt_class != background_class:
+          pred_bbox = pred_batch[query_idx][num_classes:]
+          gt_bbox = gt_batch[gt_idx][num_classes:]
+          bbox_loss += l1_loss(pred_bbox, gt_bbox) + giou_loss(pred_bbox, gt_bbox)
+        
+   # Unmatched queries → background class
+   unmatched_queries = set(range(num_queries)) - set([idx[0] for idx in matched_indices])
+   for query_idx in unmatched_queries:
+      pred_class = pred_batch[query_idx][:num_classes]
+      class_loss += cross_entropy_loss(pred_class, background_class)
+  
+  total_loss += class_loss + bbox_loss
+  ```       
 
 # conclude
 1.encoder的每个输入token代表特征图的一个像素点,encoder遍历图中剩余的所有像素点（包括它自己），来学习自己应该特别关注哪些像素点,目的是掌握全局信息. 
