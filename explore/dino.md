@@ -1,6 +1,6 @@
 # DETR with Improved deNoising anchOr boxes
 
-<img src="https://github.com/user-attachments/assets/fa0d7c6a-fb1c-48cd-b28a-02e85f8e0119" width="400" height="600">   
+<img src="https://github.com/user-attachments/assets/144eff43-44fb-4257-b90f-adcff3df9963" width="400" height="600">   
 
 ## Model          
 1. Stem        
