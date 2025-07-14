@@ -85,8 +85,8 @@
       pred_class = pred_batch[query_idx][:num_classes]
       class_loss += cross_entropy_loss(pred_class, background_class)
   
-  total_loss += class_loss + bbox_loss
-  ```       
+   total_loss += class_loss + bbox_loss
+   ```       
 
 # conclude
 1.encoder的每个输入token代表特征图的一个像素点,encoder遍历图中剩余的所有像素点（包括它自己），来学习自己应该特别关注哪些像素点,目的是掌握全局信息. 
