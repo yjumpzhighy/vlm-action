@@ -38,20 +38,17 @@
 
 6. decoder                
    a. encoder的输出特征图(b,H*W,256) + pos(b, H*W, 256)                  
-      object queries 是预输出编码，最开始随机初始化为(b, 100, 256), 后续通过学习进行更                    
-      新, 类似于pre-defined anchors.                
-      object tgt 是输出编码, 最开始归零初始化为(b, 100, 256), 后续通过学习进行更新, 类似于               
-      anchors.                 
+      object queries 是预查询编码，最开始随机初始化为(b, 100, 256), 后续通过学习进行更                    
+      新, 类似于pre-defined anchors.                               
    b. 第一个self-attention, 和encoder无关, 建模物体和物体之间的关系,找到图像中哪些位置存在物体                              
-      q = k = object_queries + object_tgt, v = object_tgt. 输出仍为object_tgt (b, 100, 256)              
-   c. 第二个self-attention, 增强encoder特征图. 其中k和v来自encoder, q来自decoder自身, 建             
-      模图形特征和物体特征之间的关系. 即根据上一个self-attention的object_tgt作为query不                
-      断去从encoder的输出特征中询问(q,k计算相似度) 图像中的物体特征?)               
-      q = object_queries + object_tgt, k = src + pos, val = src 输出object_tgt(b, 100, 256)              
-   d. 将两次self-attention的object_tgt相加作为最终object_tgt. 因为第一次代表物体信息缺乏图               
+      q = k = object_queries, v = object_queries. 输出仍为object_queries (b, 100, 256)              
+   c. 第二个cross-attention, 其中k和v来自encoder, q来自decoder自身, 建模图形特征和物体特征之间
+      的关系. 即根据object_query不断去从encoder的输出特征中询问(q,k计算相似度) 图像中的物体特征.               
+      q = object_queries, k = src + pos, val = src 输出仍为object_queries(b, 100, 256)              
+   d. 将两次attention得到的object_queries相加作为最终object_queries. 因为第一次代表物体信息缺乏图               
       像特征(class不准),第二次代表图像特征但却物体信息不足(bbox不准)                    
    e. 6个编码器重复上面步骤, 但与encoder不同6个输出都需要记录, 最终得到(6, b, 100, 256)         
-7. loss         
+8. loss         
    a. 预测              
       (6, b, 100, 256) 通过MLP投射为(6, b, 100, num_classes)               
       (6, b, 100, 256) 通过MLP投射为(6, b, 100, 4) 并sigmoid为(0,1)               
