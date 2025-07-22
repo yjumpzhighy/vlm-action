@@ -2,7 +2,8 @@
 
 
 ## BEV feats
-<img src="https://github.com/user-attachments/assets/2ba210b5-39d9-43d2-83eb-eb15a70825c1" width="400" height="600"> 
+<img src="https://github.com/user-attachments/assets/20c4571c-cc04-4c56-9043-aea0d2db3d3f" width="400" height="600"> 
+
 
 ```
 bev_queries = Parameter((H_bev * W_bev, embed_dim))
