@@ -6,8 +6,6 @@
 
 
 ## Encoder
-<img src="https://github.com/user-attachments/assets/c0d2b4f0-50e7-4c97-8871-570f7e15ccdf" width="400" height="600">
-
 1. images feed to resnet50-backbone and ffn-neck, get 5 lvls mlvl_feats [[B,N_cam,H/8,W/8],..., [B,N_cam,H/128,W/128]]       
 ```
 lvl_embeds = Parameter((5, 256)) #5 levels feats
