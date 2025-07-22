@@ -5,7 +5,7 @@
 <img src="https://github.com/user-attachments/assets/20c4571c-cc04-4c56-9043-aea0d2db3d3f" width="400" height="600"> 
 
 
-## Model
+## Encoder
 <img src="https://github.com/user-attachments/assets/c0d2b4f0-50e7-4c97-8871-570f7e15ccdf" width="400" height="600">
 
 1. images feed to resnet50-backbone and ffn-neck, get 5 lvls mlvl_feats [[B,N_cam,H/8,W/8],..., [B,N_cam,H/128,W/128]]
@@ -20,7 +20,6 @@ mlvl_feats.cat()  #[N_cam,M,B,256], M=H/8*W/8+..+H/128*W/128
 ```
 cams_embeds = Parameter((N_cam, 256)) #each camera individual embedding
 bev_quiries = Parameter((H_bev*W_bev,256)
-object_query_embedding = Parameter((900,256*2))
 
 bev_positional_embedding = nn.Embedding(..)((B,H_bev,W_bev)) #[B,256,H_bev,W_bev], learned positional embedding
 bev_positional_embedding = bev_positional_embedding.flatten(..) #[H_bev*W_bev,B,256]
@@ -87,7 +86,7 @@ ref_points_cam = (ref_points_cam[...,0:2] / ref_points_cam[...,2]).view()  #[N_c
 #3.Predict sampling offsets directly from current BEV query.
 #  and no ego motion input needed, the network learns to predict where to sample!
 sampling_offsets = Linear()(query).view() #(B,H_bev*W_bev,Heads,Num_lvls,Num_pts,2)
-attention_weights = Linear()(query).view() #(B,H_bev*W_bev,Heads,Bev_queue,Num_lvls*Num_pts)
+attention_weights = Linear()(query).view() #(B,H_bev*W_bev,Heads,Num_lvls*Num_pts)
 attention_weights = softmax(attention_weights).view() #B,H_bev*W_bev,Heads,Num_lvls,Num_pts)
 
 #4. Compute sampling locations
@@ -99,6 +98,46 @@ k = v = mlvl_feats  #[N_cam,M,B,256]
 query = MultiScaleDeformAttention(v, sampling_loc)   #[B*Bev_queue,H_bev*W_bev,256]
 query = query.permute().view(..).mean()   #[B,H_bev*W_bev,256]
 ```
+
+
+## Decoder
+bev_feats: [B, H_bev*W_bev, 256]
+object_query_embedding = Parameter((900,256*2))
+query_pos, query = split(object_query_embedding).expand  #[B,900,256], [B,900,256]
+refence_points = sigmoid(Linear(256,3)(query_pos))[:2].unsqueeze() #[B,900,1,2]
+
+```
+v = bev_feats
+
+#1. standard mha self attn
+query = MHA(q=query,k=query,v=query,query_pos=query_pos,key_pos=query_pos)
+
+#2. Predict sampling offsets directly from current BEV query.
+#   and no ego motion input needed, the network learns to predict where to sample!
+query += query_pos
+sampling_offsets = Linear()(query).view() #(B,900,Heads,Num_lvls,Num_pts,2)
+attention_weights = Linear()(query).view() #(B,900,Heads,Num_lvls*Num_pts)
+attention_weights = softmax(attention_weights).view() #B,900,Heads,Num_lvls,Num_pts)
+
+#3. Compute sampling locations
+sampling_loc = refence_points + sampling_offsets / [H_bev, W_bev]  #[B,H_bev*W_bev,Heads,Num_lvls,Num_pts,2]
+
+#4. get object query from bev features
+query = MultiScaleDeformAttention(v, sampling_loc)  #[B,900,256]
+
+```
+
+## Head
+stack query from 6 decoder blocks and get [6,B,900,256]
+then linear project to cls and reg on each lvl
+
+
+
+
+
+
+
+
 
 
 
