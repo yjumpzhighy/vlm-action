@@ -62,7 +62,7 @@ attention_weights = softmax(attention_weights).view(B*Bev_queue,H_bev*W_bev,Head
 #5. Compute sampling locations
 sampling_loc = ref_2d + sampling_offsets / [H_bev, W_bev]  #[B*Bev_queue,H_bev*W_bev,Heads,Num_lvls,Num_pts,2]
 
-#6. Sample 2d features from multi-scale feature maps
+#6. Sample 2d features from v
 query = MultiScaleDeformAttention(v, sampling_loc)   #[B*Bev_queue,H_bev*W_bev,256]
 query = query.permute().view(..).mean()   #[B,H_bev*W_bev,256]
 ```
@@ -84,23 +84,20 @@ ref_3d = ref_3d.unsqueeze(-1) #[N_pts_per_pillar,B,N_cam,H_bev*W_bev,4,1]
 ref_points_cam = matmul(lidar2img, ref_3d) #[N_pts_per_pillar,B,N_cam,H_bev*W_bev,4]
 ref_points_cam = (ref_points_cam[...,0:2] / ref_points_cam[...,2]).view()  #[N_cam,B,H_bev*W_bev,N_pts_per_pillar,2], uv coord
 
-
-#3. sample bev 3d features from image features
-q = query + bev_pos #[B,H_bev*W_bev,256]
-k = v = mlvl_feats  #[N_cam,M,B,256]
-query = MSDeformableAttention3D(q,k,v,ref_points_cam)  #[B,H_bev*W_bev,256]
-```
-
-## MultiScaleDeformAttn
-```
-#1.Predict sampling offsets directly from current BEV query.
+#3.Predict sampling offsets directly from current BEV query.
 #  and no ego motion input needed, the network learns to predict where to sample!
 sampling_offsets = Linear()(query).view() #(B,H_bev*W_bev,Heads,Num_lvls,Num_pts,2)
 attention_weights = Linear()(query).view() #(B,H_bev*W_bev,Heads,Bev_queue,Num_lvls*Num_pts)
 attention_weights = softmax(attention_weights).view() #B,H_bev*W_bev,Heads,Num_lvls,Num_pts)
 
+#4. Compute sampling locations
+sampling_loc = ref_points_cam + sampling_offsets / [H_bev, W_bev]  #[B,H_bev*W_bev,Heads,Num_lvls,Num_pts,2]
 
 
+#5. sample bev 3d features from image features
+k = v = mlvl_feats  #[N_cam,M,B,256]
+query = MultiScaleDeformAttention(v, sampling_loc)   #[B*Bev_queue,H_bev*W_bev,256]
+query = query.permute().view(..).mean()   #[B,H_bev*W_bev,256]
 ```
 
 
