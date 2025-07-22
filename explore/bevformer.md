@@ -8,7 +8,7 @@
 ## Encoder
 <img src="https://github.com/user-attachments/assets/c0d2b4f0-50e7-4c97-8871-570f7e15ccdf" width="400" height="600">
 
-1. images feed to resnet50-backbone and ffn-neck, get 5 lvls mlvl_feats [[B,N_cam,H/8,W/8],..., [B,N_cam,H/128,W/128]]
+1. images feed to resnet50-backbone and ffn-neck, get 5 lvls mlvl_feats [[B,N_cam,H/8,W/8],..., [B,N_cam,H/128,W/128]]       
 ```
 lvl_embeds = Parameter((5, 256)) #5 levels feats
 # add lvl embedding and concat all features
@@ -16,7 +16,7 @@ for lvl, feat in mlvl_feats:
   feat += lvl_embeds[lvl]
 mlvl_feats.cat()  #[N_cam,M,B,256], M=H/8*W/8+..+H/128*W/128
 ```
-2. query setup
+2. query setup  
 ```
 cams_embeds = Parameter((N_cam, 256)) #each camera individual embedding
 bev_quiries = Parameter((H_bev*W_bev,256)
@@ -101,10 +101,10 @@ query = query.permute().view(..).mean()   #[B,H_bev*W_bev,256]
 
 
 ## Decoder
-bev_feats: [B, H_bev*W_bev, 256]
-object_query_embedding = Parameter((900,256*2))
-query_pos, query = split(object_query_embedding).expand  #[B,900,256], [B,900,256]
-refence_points = sigmoid(Linear(256,3)(query_pos))[:2].unsqueeze() #[B,900,1,2]
+bev_feats: [B, H_bev*W_bev, 256]              
+object_query_embedding = Parameter((900,256*2))                   
+query_pos, query = split(object_query_embedding).expand  #[B,900,256], [B,900,256]                   
+refence_points = sigmoid(Linear(256,3)(query_pos))[:2].unsqueeze() #[B,900,1,2]                            
 
 ```
 v = bev_feats
@@ -128,7 +128,7 @@ query = MultiScaleDeformAttention(v, sampling_loc)  #[B,900,256]
 ```
 
 ## Head
-stack query from 6 decoder blocks and get [6,B,900,256]
+stack query from 6 decoder blocks and get [6,B,900,256]                               
 then linear project to cls and reg on each lvl
 
 
