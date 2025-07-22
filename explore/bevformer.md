@@ -5,39 +5,6 @@
 <img src="https://github.com/user-attachments/assets/20c4571c-cc04-4c56-9043-aea0d2db3d3f" width="400" height="600"> 
 
 
-```
-bev_queries = Parameter((H_bev * W_bev, embed_dim))
-bev_coords[H_bev*W_bev, 3] #xyz grid from range(x_min, x_max, y_min, y_max, z=0)
-
-# Project BEV coordinates to image plane
-for cam_idx in range(self.num_cameras):
-  projected_img_coords = project_bev_to_image(bev_coords, camera_poses)
-  reference_points.append(img_coords)
-reference_points = stack(reference_points)  #[B, N_cam, N_bev, 2], N_bev=H_bev*W_bev
-
-# Bilinear sampling image features at reference points
-for cam_idx in range(self.num_cameras):
-    sampled_feat = F.grid_sample(image_features, reference_points)
-    sampled_features.append(sampled_feat)
-flatten_features = stack(sampled_features).flatten() #[B, N_bev*N_cam, C]
-
-# cross-attn
-bev_features = cross_attention(
-    query=bev_queries,
-    key=flatten_features,
-    value=flatten_features
-)
-
-# Self-attn within BEV space for spatial reasoning
-bev_features = self_attention(
-    query=bev_features,
-    key=bev_features,
-    value=bev_features
-)
-```
-
-
-
 ## Model
 <img src="https://github.com/user-attachments/assets/c0d2b4f0-50e7-4c97-8871-570f7e15ccdf" width="400" height="600">
 
@@ -61,7 +28,7 @@ bev_positional_embedding = bev_positional_embedding.flatten(..) #[H_bev*W_bev,B,
 
 3. TSA
 ```
-#1. get 2d ref uv in 2d bev plane
+#1. get 2d bev plane reference location
 ref_2d = stack(linspace(0.5,H_bev-0.5,H_bev)/H_bev,
                linspace(0.5,W_bev-0.5,W_bev)/W_bev).expand() #[B,H_bev*W_bev,1,2] and 2 refers uv
 
@@ -79,7 +46,7 @@ k = prev_bev
 v = proj(prev_bev).view(..)  #[B*Bev_queue,H_bev*W_bev,Heads,-1]
 q = cat(v[:B], bev_quiries) #[B,H_bev*W_bev,512]  #prev bev_feats and current bev_query
 
-#2.Predict sampling offsets directly from current BEV query.
+#3.Predict sampling offsets directly from current BEV query.
 #  and no ego motion input needed, the network learns to predict where to sample!
 #Num_lvls: feature maps used in attention
 #Num_pts: number of sampling points for each query in each head
@@ -87,17 +54,17 @@ q = cat(v[:B], bev_quiries) #[B,H_bev*W_bev,512]  #prev bev_feats and current be
 sampling_offsets = Linear(512,128)(q) #[B,H_bev*W_bev,128]
 sampling_offsets = sampling_offsets.view(B*Bev_queue,H_bev*W_bev,Heads,Num_lvls,Num_pts,2)
 
-#3. Predict attention weights from query
+#4. Predict attention weights from query
 attention_weights = Linear(512, 64)(q) #[B,H_bev*W_bev,64]
 attention_weights = attention_weights.view(B,H_bev*W_bev,Heads,Bev_queue,Num_lvls*Num_pts)
 attention_weights = softmax(attention_weights).view(B*Bev_queue,H_bev*W_bev,Heads,Num_lvls,Num_pts)
 
-#4. Compute sampling locations
+#5. Compute sampling locations
 sampling_loc = ref_2d + sampling_offsets / [H_bev, W_bev]  #[B*Bev_queue,H_bev*W_bev,Heads,Num_lvls,Num_pts,2]
 
-#5. Sample 2d features from multi-scale feature maps
-output = MultiScaleDeformAttn(v, sampling_loc)   #[B*Bev_queue,H_bev*W_bev,256]
-output = output.permute().view(..).mean()   #[B,H_bev*W_bev,256]
+#6. Sample 2d features from multi-scale feature maps
+query = MultiScaleDeformAttention(v, sampling_loc)   #[B*Bev_queue,H_bev*W_bev,256]
+query = query.permute().view(..).mean()   #[B,H_bev*W_bev,256]
 ```
   
 
@@ -110,22 +77,34 @@ Z = pc_zmax - pc_zmin
 zs = linspace(0.5,Z-0.5,Z).expand(N_pts_in_pillar,H_bev,W_bev) / Z
 ref_3d = stack(xs,ys,zs).expand()  #[B,N_pts_per_pillar,H_bev*W_bev,3], indicates xyz of each voxel
 
-#2. apply camera pos (extrinsics & intrinsics) and project to image coord
+#2. apply camera pos (extrinsics & intrinsics) and project to 2d image coord
 lidar2img = tensor(..) #[B,N_cam,4,4]
 lidar2img = lidar2img.repeat(..) #[N_pts_per_pillar,B,N_cam,H_bev*W_bev,4,4]
 ref_3d = ref_3d.unsqueeze(-1) #[N_pts_per_pillar,B,N_cam,H_bev*W_bev,4,1]
 ref_points_cam = matmul(lidar2img, ref_3d) #[N_pts_per_pillar,B,N_cam,H_bev*W_bev,4]
-ref_points_cam = ref_points_cam[...,0:2] / ref_points_cam[...,2]  #[N_pts_per_pillar,B,N_cam,H_bev*W_bev,2], uv coord
+ref_points_cam = (ref_points_cam[...,0:2] / ref_points_cam[...,2]).view()  #[N_cam,B,H_bev*W_bev,N_pts_per_pillar,2], uv coord
 
-#3.
-bev_quiries = bev_quiries.expand(..) #[B,H_bev*W_bev,256]
-bev_pos = bev_positional_embedding.flatten(..) #[B,H_bev*W_bev,256]
-query = deformable_attn(q=bev_quiries+bev_pos, k=bev_quiries, v=bev_quiries)
 
+#3. sample bev 3d features from image features
+q = query + bev_pos #[B,H_bev*W_bev,256]
+k = v = mlvl_feats  #[N_cam,M,B,256]
+query = MSDeformableAttention3D(q,k,v,ref_points_cam)  #[B,H_bev*W_bev,256]
+```
+
+## MultiScaleDeformAttn
+```
+#1.Predict sampling offsets directly from current BEV query.
+#  and no ego motion input needed, the network learns to predict where to sample!
+sampling_offsets = Linear()(query).view() #(B,H_bev*W_bev,Heads,Num_lvls,Num_pts,2)
+attention_weights = Linear()(query).view() #(B,H_bev*W_bev,Heads,Bev_queue,Num_lvls*Num_pts)
+attention_weights = softmax(attention_weights).view() #B,H_bev*W_bev,Heads,Num_lvls,Num_pts)
 
 
 
 ```
 
 
-## MultiScaleDeformAttn
+
+
+
+
