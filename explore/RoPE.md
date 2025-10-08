@@ -13,6 +13,7 @@
 5. q=q+pos, k=k+pos, attn = sm(q@k')    
 
 # Relative pos embedding
+## RoPE
 若对q旋转角度m, 对k旋转角度n, 则其内积<q',k'>只与q,k,(m-n)相关,也即是和m和n的相对位置无关,只和相对位置相关.
                          
 q: [B, L, Heads, C]
@@ -32,9 +33,15 @@ q_odd = q[..., 1::2]   # Shape [B,L,Heas,C/2]: c1, c3, c5, ...
 // [sin   cos] [q_odd ]                      
 q_even_rot = q_even * cos_values - q_odd * sin_values   # Shape[B,L,Heads,C/2]                
 q_odd_rot = q_even * sin_values + q_odd * cos_values   # Shape[B,L,Heads,C/2]                
-               
 q = torch.stack([q_even_rot, q_odd_rot], dim=-1)                
 
-
-
+### Complemtary
+// [cos  -sin] [q_even]                     
+// [sin   cos] [q_odd ] 
+q_even_rot = q_even * cos_values - q_odd * sin_values = q_even * cos_values  + (-q_odd * sin_values)
+q_odd_rot = q_even * sin_values + q_odd * cos_values = q_odd * cos_values + q_even * sin_values
+cos_full = stack(cos_values, cos_values)
+sin_full = stack(sin_values, sin_values)
+q_transformed = stack([-q_odd, q_even])
+q = q * cos_full + q_transformed * sin_full
     
