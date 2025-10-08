@@ -29,19 +29,19 @@ q_even = q[..., 0::2]  # Shape [B,L,Heas,C/2]: c0, c2, c4, ...
 q_odd = q[..., 1::2]   # Shape [B,L,Heas,C/2]: c1, c3, c5, ...                              
                   
 // Apply 2D rotation matrix to each pair:                                    
-// [cos  -sin] [q_even]                     
-// [sin   cos] [q_odd ]                      
-q_even_rot = q_even * cos_values - q_odd * sin_values   # Shape[B,L,Heads,C/2]                
+// [cos  -sin] [q_even]                          
+// [sin   cos] [q_odd ]                                    
+q_even_rot = q_even * cos_values - q_odd * sin_values   # Shape[B,L,Heads,C/2]                               
 q_odd_rot = q_even * sin_values + q_odd * cos_values   # Shape[B,L,Heads,C/2]                
 q = torch.stack([q_even_rot, q_odd_rot], dim=-1)                
 
 ### Complemtary
-// [cos  -sin] [q_even]                     
-// [sin   cos] [q_odd ] 
-q_even_rot = q_even * cos_values - q_odd * sin_values = q_even * cos_values  + (-q_odd * sin_values)
-q_odd_rot = q_even * sin_values + q_odd * cos_values = q_odd * cos_values + q_even * sin_values
-cos_full = stack(cos_values, cos_values)
-sin_full = stack(sin_values, sin_values)
-q_transformed = stack([-q_odd, q_even])
-q = q * cos_full + q_transformed * sin_full
+// [cos  -sin] [q_even]                      
+// [sin   cos] [q_odd ]                 
+q_even_rot = q_even * cos_values - q_odd * sin_values = q_even * cos_values  + (-q_odd * sin_values)                  
+q_odd_rot = q_even * sin_values + q_odd * cos_values = q_odd * cos_values + q_even * sin_values                          
+cos_full = stack(cos_values, cos_values)                              
+sin_full = stack(sin_values, sin_values)                              
+q_transformed = stack([-q_odd, q_even])                                
+q = q * cos_full + q_transformed * sin_full                        
     
