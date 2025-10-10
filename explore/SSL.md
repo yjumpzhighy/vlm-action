@@ -28,3 +28,7 @@ L_CLS = CrossEntropy(CLS_^u, CLS_v) + CrossEntropy(CLS_^v, CLS_u)    // class to
 
 ```
 
+
+
+## DINOV3
+
