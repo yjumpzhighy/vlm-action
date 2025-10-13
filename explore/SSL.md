@@ -23,12 +23,23 @@ with no_grad():
 patchtokens_^u, CLS_^u = student(^u)  // Student predict patch tokens and CLS for masked masked view ^u
 patchtokens_^v, CLS_^v = student(^v)  // Student predict patch tokens and CLS for masked masked view ^v
 
-Loss_MIM = CrossEntropy(P_^u[M], P_v[M]) + CrossEntropy(P_^v[M], P_u[M])  // Masked Image Modeling, for local grounding loss
+Loss_MIM = CrossEntropy(P_^u[M], P_v[M]) + CrossEntropy(P_^v[M], P_u[M])  // Masked Image Modeling, local grounding loss                
 L_CLS = CrossEntropy(CLS_^u, CLS_v) + CrossEntropy(CLS_^v, CLS_u)    // class tokens loss, for global loss
 
 ```
 
 
+## Gram matrixs
+for feature map F[C, H*W], calcualte the correlations between channels:         
+
+```python
+G = F * F.T   # shape [C,C]
+# G(i，j)： similarity between the feature vector at spatial location i and the feature vector at spatial location j.
+```
+
+Overall, it meaures correlation between channels among the whole image, i.e, "style" or "texture" independent of position.           
+
 
 ## DINOV3
+
 
