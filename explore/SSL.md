@@ -17,13 +17,13 @@ u, v = Augment(x)
 ^v = ApplyMask(v)
 
 with no_grad():
-  patchtokens_u, CLS_u = teacher(u)  // Teacher output patch tokens and CLS for view u
-  patchtokens_v, CLS_v = teacher(v)  // Teacher output patch tokens and CLS for view v
+  Patch_u, CLS_u = teacher(u)  // Teacher output patch tokens and CLS token for view u
+  Patch_v, CLS_v = teacher(v)  // Teacher output patch tokens and CLS token for view v
 
-patchtokens_^u, CLS_^u = student(^u)  // Student predict patch tokens and CLS for masked masked view ^u
-patchtokens_^v, CLS_^v = student(^v)  // Student predict patch tokens and CLS for masked masked view ^v
+Patch_^u, CLS_^u = student(^u)  // Student predict patch tokens and CLS token for masked masked view ^u
+Patch_^v, CLS_^v = student(^v)  // Student predict patch tokens and CLS token for masked masked view ^v
 
-Loss_MIM = CrossEntropy(P_^u[M], P_v[M]) + CrossEntropy(P_^v[M], P_u[M])  // Masked Image Modeling, local grounding loss                
+Loss_MIM = CrossEntropy(Patch_^u[M], Patch_v[M]) + CrossEntropy(Patch_^v[M], Patch_u[M])  // Masked Image Modeling, local grounding loss                
 L_CLS = CrossEntropy(CLS_^u, CLS_v) + CrossEntropy(CLS_^v, CLS_u)    // class tokens loss, for global loss
 
 ```
@@ -38,6 +38,7 @@ G = F * F.T   # shape [C,C]
 ```
 
 Overall, it meaures correlation between channels among the whole image, i.e, "style" or "texture" independent of position.           
+
 
 
 ## DINOV3
