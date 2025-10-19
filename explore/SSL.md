@@ -59,15 +59,36 @@ p_teacher_center = p_teacher - c
 c_batch_mean = mean(p_teacher)
 c = (0.8 * c) + ((1 - 0.8) * c_batch_mean)
 ```
+              
+## Sinkhorn-Knopp          
+Normalization/Stabilization for teacher's output probabilities.            
+(replacement of centering)         
+                     
+            
+## Koleo loss            
+maximize the distance between Student's every feature to others,ensuring        
+that learned representations are not redundant and are max diversed.
+             
+For feature's distance to others d, minimize “-log(d)” would enforce the           
+distance larger, i.e, features spread out.       
+           
+```python
+# student feature map Z（B，C)
 
+# Calculate feature pairwise distance
+for i in range(B):
+   for j in range(B):
+      D[i,j] = ||Z[i] - Z[j]||^2
 
-## Koleo loss
-additive regularization term to DINO and iBOT losses, to prevents feature collapse.
-For feature map Z（B，C),
+# Find the nearest neighbor for each feature
+Min_D = []
+FOR i FROM 1 TO B:
+   D_min_i = min(D[i, :])
+   Min_D.append(D_min_i)  #[B,]
 
-
-
-
+// Calculate the final koLeo loss
+loss = mean(-0.5 * log(Min_D))
+```
 
 ## DINOV3
 
