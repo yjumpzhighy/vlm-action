@@ -37,6 +37,24 @@ vector at spatial location j.
 ```
 Overall, it meaures correlation between channels among the whole image, i.e, "style" or       
 "texture" independent of position.            
+                 
+              
+## Gram anchoring            
+After many iterations training, local features (patch tokens) tend to become overly similar to         
+the global Class Token feature, i.e, patch features lose their local specificity & features are        
+blurry and scattered.             
+                  
+We use an earlier model as anchoring (which preserved good patch features), to enforce the student    
+model follow the anchor model's patch embeddings distribution.           
+```python
+# anchor model patch features: F[C, H*W]
+# student model patch features: F'[C, H*W]
+loss = || F * F.T - F' * F'.T ||
+
+```
+
+
+
 
 
 ## Centering
@@ -89,7 +107,10 @@ FOR i FROM 1 TO B:
 // Calculate the final koLeo loss
 loss = mean(-0.5 * log(Min_D))
 ```
-
-## DINOV3
+ 
+## DINOV3      
+         
+<img src="https://github.com/user-attachments/assets/dc94e096-22fa-43bf-ab81-4f8f80260ec3" width="400" height="600">         
+    
 
 
