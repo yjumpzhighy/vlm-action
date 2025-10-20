@@ -109,8 +109,15 @@ loss = mean(-0.5 * log(Min_D))
 ```
  
 ## DINOV3      
-         
+          
 <img src="https://github.com/user-attachments/assets/dc94e096-22fa-43bf-ab81-4f8f80260ec3" width="400" height="600">         
-    
+               
+### patch features quality             
+1. neighbor patches weighted average (weighted sum of patch itself and its neighbors), help smoothing outlier patches    
+   and enhancing patch-level consistency.           
+2. mitigates the degradation of patch-level consistency by enforcing gram anchor.           
+3. iBOT loss to enforce pacth level dense feature quality               
+4. feeding higher-resolution images into the backbone to produces finer and more detailed feature maps. input images              
+   at twice the normal resolution, then 2× down-sample the resulting feature maps with the bicubic interpolation.              
 
-
+        
